@@ -144,6 +144,8 @@ async function processQueue({
   const emailSendMode = getEmailSendMode();
   const liveGuard = assertLiveEmailAllowed();
   const runId = `email-run-${Date.now()}-${crypto.randomUUID()}`;
+  let newJobsQueued = 0;
+  let duplicateJobsSkipped = 0;
 
   if (liveGuard) {
     return Response.json(
@@ -152,6 +154,8 @@ async function processQueue({
         error: liveGuard.error,
         emailSendMode,
         runId,
+        newJobsQueued,
+        duplicateJobsSkipped,
       },
       { status: 400 }
     );
@@ -176,7 +180,14 @@ async function processQueue({
 
   if (cError) {
     console.error('[Cron Job] Error fetching campaigns:', cError);
-    return Response.json({ success: false, error: cError.message, emailSendMode, runId }, { status: 500 });
+    return Response.json({
+      success: false,
+      error: cError.message,
+      emailSendMode,
+      runId,
+      newJobsQueued,
+      duplicateJobsSkipped,
+    }, { status: 500 });
   }
 
   if (!runningCampaigns || runningCampaigns.length === 0) {
@@ -224,8 +235,6 @@ async function processQueue({
 
   console.log(`[Cron Job] Found ${activeCampaigns.length} scheduled campaigns ready to process.`);
 
-  let newJobsQueued = 0;
-
   // 4. For each active campaign, find target contacts and queue outbound jobs
   for (const campaign of activeCampaigns) {
     try {
@@ -249,45 +258,38 @@ async function processQueue({
 
       console.log(`[Campaign: ${campaign.name}] Found ${matchingContacts.length} contacts matching tags: [${targetTags.join(', ')}]`);
 
-      // Queue email jobs for matching contacts that don't have one already
+      // Queue email jobs idempotently for the initial campaign step.
       for (const contact of matchingContacts) {
         if (contact.workspace_id !== campaign.workspace_id) {
           console.error(`[Cron Job] Skipping contact ${contact.id}: workspace mismatch.`);
           continue;
         }
 
-        const { data: existingJob, error: jobCheckErr } = await supabase
+        const sequenceIndex = 0;
+        const idempotencyKey = `${campaign.id}:${contact.id}:${sequenceIndex}`;
+
+        const { error: insertErr } = await supabase
           .from('email_jobs')
-          .select('id')
-          .eq('workspace_id', campaign.workspace_id)
-          .eq('campaign_id', campaign.id)
-          .eq('contact_id', contact.id)
-          .maybeSingle();
+          .insert({
+            workspace_id: campaign.workspace_id,
+            campaign_id: campaign.id,
+            contact_id: contact.id,
+            template_id: campaign.template_id,
+            idempotency_key: idempotencyKey,
+            sequence_index: sequenceIndex,
+            status: 'queued',
+            send_mode: emailSendMode,
+            step_number: sequenceIndex,
+          });
 
-        if (jobCheckErr) {
-          console.error(`[Cron Job] Error checking existing jobs:`, jobCheckErr);
-          continue;
-        }
-
-        // If no job exists yet for this campaign + contact, queue a new email
-        if (!existingJob) {
-          const { error: insertErr } = await supabase
-            .from('email_jobs')
-            .insert({
-              workspace_id: campaign.workspace_id,
-              campaign_id: campaign.id,
-              contact_id: contact.id,
-              template_id: campaign.template_id,
-              status: 'queued',
-              send_mode: emailSendMode,
-              step_number: 0,
-            });
-
-          if (insertErr) {
-            console.error(`[Cron Job] Error inserting email job:`, insertErr);
+        if (insertErr) {
+          if (insertErr.code === '23505') {
+            duplicateJobsSkipped++;
           } else {
-            newJobsQueued++;
+            console.error(`[Cron Job] Error inserting email job:`, insertErr);
           }
+        } else {
+          newJobsQueued++;
         }
       }
     } catch (campaignErr) {
@@ -306,7 +308,14 @@ async function processQueue({
 
   if (claimError) {
     console.error('[Cron Job] Error claiming email jobs:', claimError.message);
-    return Response.json({ success: false, error: claimError.message, emailSendMode, runId }, { status: 500 });
+    return Response.json({
+      success: false,
+      error: claimError.message,
+      emailSendMode,
+      runId,
+      newJobsQueued,
+      duplicateJobsSkipped,
+    }, { status: 500 });
   }
 
   const claimedIds = (claimedRows || []).map((job: any) => job.id);
@@ -323,7 +332,14 @@ async function processQueue({
 
     if (claimedFetchErr) {
       console.error('[Cron Job] Error fetching claimed jobs:', claimedFetchErr.message);
-      return Response.json({ success: false, error: claimedFetchErr.message, emailSendMode, runId }, { status: 500 });
+      return Response.json({
+        success: false,
+        error: claimedFetchErr.message,
+        emailSendMode,
+        runId,
+        newJobsQueued,
+        duplicateJobsSkipped,
+      }, { status: 500 });
     }
 
     queuedJobs = claimedJobs || [];
@@ -491,6 +507,7 @@ async function processQueue({
     timestamp: new Date().toISOString(),
     activeCampaignsProcessed: activeCampaigns.length,
     newJobsQueued,
+    duplicateJobsSkipped,
     totalJobsProcessed: queuedJobs.length,
     sentCount,
     mockedCount,

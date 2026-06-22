@@ -82,6 +82,8 @@ export interface EmailJob {
   campaign_id: string;
   contact_id: string;
   template_id: string;
+  idempotency_key: string;
+  sequence_index: number;
   status: JobStatus;
   send_mode?: EmailJobSendMode | null;
   provider?: EmailJobProvider | null;

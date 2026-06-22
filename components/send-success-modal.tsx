@@ -28,6 +28,7 @@ export default function SendSuccessModal({ isOpen, onClose, emailSendMode = 'moc
   const [result, setResult] = useState<{
     emailSendMode?: EmailSendMode;
     newJobsQueued?: number;
+    duplicateJobsSkipped?: number;
     sentCount?: number;
     mockedCount?: number;
     dryRunCount?: number;
@@ -204,6 +205,12 @@ export default function SendSuccessModal({ isOpen, onClose, emailSendMode = 'moc
                   <div className="flex justify-between">
                     <span>E-mails enfileirados:</span>
                     <strong className="text-[#002B6A]">{result.newJobsQueued}</strong>
+                  </div>
+                )}
+                {result?.duplicateJobsSkipped !== undefined && result.duplicateJobsSkipped > 0 && (
+                  <div className="flex justify-between">
+                    <span>Duplicados ignorados:</span>
+                    <strong className="text-slate-500">{result.duplicateJobsSkipped}</strong>
                   </div>
                 )}
                 {result?.sentCount !== undefined && (
