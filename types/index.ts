@@ -86,6 +86,12 @@ export interface EmailJob {
   send_mode?: EmailJobSendMode | null;
   provider?: EmailJobProvider | null;
   provider_message_id?: string | null;
+  attempt_count: number;
+  max_attempts: number;
+  locked_at?: string | null;
+  locked_by?: string | null;
+  last_error?: string | null;
+  processed_at?: string | null;
   sent_at?: string | null;
   error_message?: string | null;
   step_number: number;

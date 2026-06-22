@@ -32,6 +32,8 @@ export default function SendSuccessModal({ isOpen, onClose, emailSendMode = 'moc
     mockedCount?: number;
     dryRunCount?: number;
     failedCount?: number;
+    retriedCount?: number;
+    skippedCount?: number;
     message?: string;
   } | null>(null);
   const visibleMode = result?.emailSendMode || emailSendMode;
@@ -226,6 +228,18 @@ export default function SendSuccessModal({ isOpen, onClose, emailSendMode = 'moc
                   <div className="flex justify-between border-t border-slate-100 pt-1.5 text-rose-500">
                     <span>Falhas no envio:</span>
                     <strong>{result.failedCount}</strong>
+                  </div>
+                )}
+                {result?.retriedCount !== undefined && result.retriedCount > 0 && (
+                  <div className="flex justify-between border-t border-slate-100 pt-1.5 text-amber-600">
+                    <span>Retentativas agendadas:</span>
+                    <strong>{result.retriedCount}</strong>
+                  </div>
+                )}
+                {result?.skippedCount !== undefined && result.skippedCount > 0 && (
+                  <div className="flex justify-between border-t border-slate-100 pt-1.5 text-slate-500">
+                    <span>Ignorados:</span>
+                    <strong>{result.skippedCount}</strong>
                   </div>
                 )}
                 {result?.message && (

@@ -4,6 +4,9 @@ import { sendEmail } from '@/services/resend';
 import { canSendCampaigns, WorkspaceRole } from '@/lib/permissions';
 import { assertLiveEmailAllowed, getEmailSendMode } from '@/lib/email-mode';
 
+const EMAIL_JOB_BATCH_SIZE = 25;
+const STALE_JOB_MINUTES = 15;
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const force = searchParams.get('force') === 'true';
@@ -140,6 +143,7 @@ async function processQueue({
   const scopedWorkspaceId = context.workspaceId;
   const emailSendMode = getEmailSendMode();
   const liveGuard = assertLiveEmailAllowed();
+  const runId = `email-run-${Date.now()}-${crypto.randomUUID()}`;
 
   if (liveGuard) {
     return Response.json(
@@ -147,13 +151,14 @@ async function processQueue({
         success: false,
         error: liveGuard.error,
         emailSendMode,
+        runId,
       },
       { status: 400 }
     );
   }
 
   console.log(
-    `[Cron Job] Triggering campaign dispatch processor (force=${force}, scope=${scopedWorkspaceId || 'all-scheduled'}, emailMode=${emailSendMode})...`
+    `[Cron Job] Triggering campaign dispatch processor (runId=${runId}, force=${force}, scope=${scopedWorkspaceId || 'all-scheduled'}, emailMode=${emailSendMode})...`
   );
   const supabase = createAdminClient();
 
@@ -171,25 +176,15 @@ async function processQueue({
 
   if (cError) {
     console.error('[Cron Job] Error fetching campaigns:', cError);
-    return Response.json({ success: false, error: cError.message, emailSendMode }, { status: 500 });
+    return Response.json({ success: false, error: cError.message, emailSendMode, runId }, { status: 500 });
   }
 
   if (!runningCampaigns || runningCampaigns.length === 0) {
-    console.log('[Cron Job] No campaigns currently running.');
-    return Response.json({
-      success: true,
-      message: 'No running campaigns to process',
-      emailSendMode,
-      processedCampaigns: 0,
-      sentCount: 0,
-      mockedCount: 0,
-      dryRunCount: 0,
-      failedCount: 0,
-    });
+    console.log('[Cron Job] No running campaigns currently running. Continuing to claim existing queued/stale jobs.');
   }
 
   // 3. Filter campaigns that match the schedule based on their specific workspace timezone
-  const activeCampaigns = (runningCampaigns as any[]).filter((campaign) => {
+  const activeCampaigns = ((runningCampaigns || []) as any[]).filter((campaign) => {
     if (force) {
       console.log(`[Campaign Filter] "${campaign.name}" | Force run active. Bypassing schedule check.`);
       return true;
@@ -300,31 +295,50 @@ async function processQueue({
     }
   }
 
-  // 5. Query and process all queued jobs
-  let queuedJobsQuery = supabase
-    .from('email_jobs')
-    .select('*, campaigns(*), templates(*), contacts(*)')
-    .eq('status', 'queued');
+  // 5. Atomically claim queued or stale processing jobs for this run.
+  const { data: claimedRows, error: claimError } = await supabase
+    .rpc('claim_email_jobs', {
+      target_workspace_id: scopedWorkspaceId || null,
+      claim_run_id: runId,
+      batch_size: EMAIL_JOB_BATCH_SIZE,
+      stale_after_minutes: STALE_JOB_MINUTES,
+    });
 
-  if (scopedWorkspaceId) {
-    queuedJobsQuery = queuedJobsQuery.eq('workspace_id', scopedWorkspaceId);
+  if (claimError) {
+    console.error('[Cron Job] Error claiming email jobs:', claimError.message);
+    return Response.json({ success: false, error: claimError.message, emailSendMode, runId }, { status: 500 });
   }
 
-  const { data: queuedJobs, error: queueFetchErr } = await queuedJobsQuery;
+  const claimedIds = (claimedRows || []).map((job: any) => job.id);
+  let queuedJobs: any[] = [];
+  let skippedCount = 0;
 
-  if (queueFetchErr) {
-    console.error('[Cron Job] Error fetching queued jobs:', queueFetchErr);
-    return Response.json({ success: false, error: queueFetchErr.message, emailSendMode }, { status: 500 });
+  if (claimedIds.length > 0) {
+    const { data: claimedJobs, error: claimedFetchErr } = await supabase
+      .from('email_jobs')
+      .select('*, campaigns(*), templates(*), contacts(*)')
+      .in('id', claimedIds)
+      .eq('status', 'processing')
+      .eq('locked_by', runId);
+
+    if (claimedFetchErr) {
+      console.error('[Cron Job] Error fetching claimed jobs:', claimedFetchErr.message);
+      return Response.json({ success: false, error: claimedFetchErr.message, emailSendMode, runId }, { status: 500 });
+    }
+
+    queuedJobs = claimedJobs || [];
+    skippedCount = Math.max(0, claimedIds.length - queuedJobs.length);
   }
 
-  console.log(`[Cron Job] Processing ${queuedJobs?.length || 0} queued email jobs...`);
+  console.log(`[Cron Job] Claimed ${queuedJobs.length} email jobs for run ${runId}.`);
 
   let sentCount = 0;
   let mockedCount = 0;
   let dryRunCount = 0;
   let failedCount = 0;
+  let retriedCount = 0;
 
-  for (const job of (queuedJobs || [])) {
+  for (const job of queuedJobs) {
     try {
       const jobWorkspaceId = job.workspace_id;
       const campaignWorkspaceId = job.campaigns?.workspace_id;
@@ -344,30 +358,26 @@ async function processQueue({
             send_mode: emailSendMode,
             provider: null,
             provider_message_id: null,
+            locked_at: null,
+            locked_by: null,
+            last_error: 'Workspace mismatch prevented dispatch',
+            processed_at: new Date().toISOString(),
             error_message: 'Workspace mismatch prevented dispatch',
           })
-          .eq('id', job.id);
+          .eq('id', job.id)
+          .eq('locked_by', runId);
         failedCount++;
         continue;
       }
 
-      // A. Update job status to processing to lock it
-      await supabase
-        .from('email_jobs')
-        .update({
-          status: 'processing',
-          send_mode: emailSendMode,
-        })
-        .eq('id', job.id);
-
-      // B. Compile templates
+      // A. Compile templates after the job has been atomically claimed.
       const compiled = compileEmail(
         job.templates.subject,
         job.templates.body,
         job.contacts
       );
 
-      // C. Call email service (useAdmin: true to query SMTP configs bypassing RLS)
+      // B. Call email service (useAdmin: true to query SMTP configs bypassing RLS)
       const result = await sendEmail({
         to: job.contacts.email,
         subject: compiled.subject,
@@ -377,7 +387,7 @@ async function processQueue({
         useAdmin: true,
       });
 
-      // D. Update job status based on result
+      // C. Update job status based on result
       if (result.success) {
         const isLiveProvider = result.provider === 'smtp' || result.provider === 'resend';
         const finalStatus = result.mode === 'mock'
@@ -394,9 +404,14 @@ async function processQueue({
             provider: result.provider || null,
             provider_message_id: isLiveProvider ? result.id || null : null,
             sent_at: isLiveProvider ? new Date().toISOString() : null,
+            processed_at: new Date().toISOString(),
+            locked_at: null,
+            locked_by: null,
+            last_error: null,
             error_message: isLiveProvider ? null : `${result.mode} mode: provider delivery skipped`,
           })
-          .eq('id', job.id);
+          .eq('id', job.id)
+          .eq('locked_by', runId);
 
         if (isLiveProvider) {
           // Only live provider delivery should count as a real contact.
@@ -415,32 +430,56 @@ async function processQueue({
           dryRunCount++;
         }
       } else {
+        const errorMessage = result.error || 'SMTP delivery failed';
+        const attemptsRemaining = (job.attempt_count || 0) < (job.max_attempts || 3);
+
         await supabase
           .from('email_jobs')
           .update({
-            status: 'failed',
+            status: attemptsRemaining ? 'queued' : 'failed',
             send_mode: result.mode,
             provider: result.provider || null,
             provider_message_id: null,
-            error_message: result.error || 'SMTP delivery failed',
+            locked_at: null,
+            locked_by: null,
+            last_error: errorMessage,
+            processed_at: attemptsRemaining ? null : new Date().toISOString(),
+            error_message: errorMessage,
           })
-          .eq('id', job.id);
+          .eq('id', job.id)
+          .eq('locked_by', runId);
 
-        failedCount++;
+        if (attemptsRemaining) {
+          retriedCount++;
+        } else {
+          failedCount++;
+        }
       }
     } catch (jobErr: any) {
-      console.error(`[Cron Job] Exception processing job ID ${job.id}:`, jobErr);
+      const errorMessage = jobErr?.message || 'Unexpected exception occurred during dispatch';
+      const attemptsRemaining = (job.attempt_count || 0) < (job.max_attempts || 3);
+      console.error(`[Cron Job] Exception processing job ID ${job.id}:`, errorMessage);
       await supabase
         .from('email_jobs')
         .update({
-          status: 'failed',
+          status: attemptsRemaining ? 'queued' : 'failed',
           send_mode: emailSendMode,
           provider: null,
           provider_message_id: null,
-          error_message: jobErr?.message || 'Unexpected exception occurred during dispatch',
+          locked_at: null,
+          locked_by: null,
+          last_error: errorMessage,
+          processed_at: attemptsRemaining ? null : new Date().toISOString(),
+          error_message: errorMessage,
         })
-        .eq('id', job.id);
-      failedCount++;
+        .eq('id', job.id)
+        .eq('locked_by', runId);
+
+      if (attemptsRemaining) {
+        retriedCount++;
+      } else {
+        failedCount++;
+      }
     }
   }
 
@@ -448,13 +487,16 @@ async function processQueue({
     success: true,
     message: 'Campaign processing run completed successfully.',
     emailSendMode,
+    runId,
     timestamp: new Date().toISOString(),
     activeCampaignsProcessed: activeCampaigns.length,
     newJobsQueued,
-    totalJobsProcessed: (queuedJobs || []).length,
+    totalJobsProcessed: queuedJobs.length,
     sentCount,
     mockedCount,
     dryRunCount,
     failedCount,
+    retriedCount,
+    skippedCount,
   });
 }
