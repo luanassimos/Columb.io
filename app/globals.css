@@ -1,0 +1,206 @@
+@import "tailwindcss";
+
+:root {
+  --background: #F7FAFF;
+  --foreground: #F7FAFF;
+  
+  --card: #ffffff;
+  --card-foreground: #061A40;
+  
+  --popover: #ffffff;
+  --popover-foreground: #061A40;
+  
+  --primary: #2D6BFF;
+  --primary-foreground: #ffffff;
+  
+  --secondary: #EAF2FF;
+  --secondary-foreground: #002B6A;
+  
+  --muted: #EAF2FF;
+  --muted-foreground: #475569;
+  
+  --accent: #EAF2FF;
+  --accent-foreground: #002B6A;
+  
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  
+  --border: #D8E0EA;
+  --input: #D8E0EA;
+  --ring: #2D6BFF;
+  
+  --radius: 0.5rem;
+}
+
+@theme inline {
+  --font-sans: var(--font-inter), sans-serif;
+  --font-mono: var(--font-geist-mono), monospace;
+
+  /* Brand Typography Tokens */
+  --text-h1: 40px;
+  --text-h1--line-height: 48px;
+  
+  --text-h2: 28px;
+  --text-h2--line-height: 36px;
+
+  --text-h3: 20px;
+  --text-h3--line-height: 28px;
+
+  --text-body: 15px;
+  --text-body--line-height: 23px;
+
+  --text-caption: 11px;
+  --text-caption--line-height: 16px;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+  
+  --animate-accordion-down: accordion-down 0.2s ease-out;
+  --animate-accordion-up: accordion-up 0.2s ease-out;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  font-size: var(--text-body);
+  line-height: var(--text-body--line-height);
+  font-weight: 400;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  overflow-x: hidden;
+}
+
+h1 {
+  font-size: var(--text-h1);
+  line-height: var(--text-h1--line-height);
+  font-weight: 700; /* Bold */
+}
+
+h2 {
+  font-size: var(--text-h2);
+  line-height: var(--text-h2--line-height);
+  font-weight: 600; /* Semibold */
+}
+
+h3 {
+  font-size: var(--text-h3);
+  line-height: var(--text-h3--line-height);
+  font-weight: 600; /* Semibold */
+}
+
+/* Custom scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--background);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #cbd5e1;
+}
+
+/* Glassmorphism utility */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(0, 43, 106, 0.1);
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.65);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(0, 43, 106, 0.08);
+}
+
+/* Pulse animation for statuses */
+@keyframes status-pulse {
+  0%, 100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.pulse-dot {
+  animation: status-pulse 2s infinite ease-in-out;
+}
+
+/* Delayed loading animations to prevent flickering on quick responses */
+@keyframes loading-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-loading-delay {
+  opacity: 0;
+  animation: loading-fade-in 0.2s ease-out 0.2s forwards;
+}
+
+/* Shimmer animation for page skeletons */
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.skeleton-pulse {
+  background: linear-gradient(90deg, #EAF2FF 25%, #D8E0EA 50%, #EAF2FF 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s infinite linear;
+}
+
+/* Slide-in animation for modal panels */
+@keyframes slide-in-right {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-in-right {
+  animation: slide-in-right 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
