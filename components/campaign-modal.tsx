@@ -43,6 +43,7 @@ export default function CampaignModal({
   const [scheduleTime, setScheduleTime] = useState('09:00');
   const [targetTags, setTargetTags] = useState<string[]>([]);
   const [smtpSettingId, setSmtpSettingId] = useState<string>('');
+  const [dispatchType, setDispatchType] = useState<'scheduled' | 'immediate'>('scheduled');
 
   const firstInputRef = useRef<HTMLInputElement>(null);
 
@@ -64,6 +65,7 @@ export default function CampaignModal({
         setScheduleTime(campaignToEdit.schedule_time || '09:00');
         setTargetTags(campaignToEdit.target_tags || []);
         setSmtpSettingId(campaignToEdit.smtp_setting_id || smtpSettingsList[0]?.id || '');
+        setDispatchType(campaignToEdit.dispatch_type || 'scheduled');
       } else {
         setName('');
         // Pre-select first template if available
@@ -74,6 +76,7 @@ export default function CampaignModal({
         setScheduleTime('09:00');
         setTargetTags([]);
         setSmtpSettingId(smtpSettingsList[0]?.id || '');
+        setDispatchType('scheduled');
       }
       setError(null);
     }
@@ -96,7 +99,9 @@ export default function CampaignModal({
     e.preventDefault();
     setError(null);
 
-    if (!name.trim() || !templateId || scheduleDays.length === 0 || !scheduleTime) {
+    const isScheduled = dispatchType === 'scheduled';
+
+    if (!name.trim() || !templateId || (isScheduled && (scheduleDays.length === 0 || !scheduleTime))) {
       setError('Campaign Name, Email Template, Days of the Week and Time are required.');
       return;
     }
@@ -113,7 +118,7 @@ export default function CampaignModal({
 
     // Round scheduleTime to nearest 5 minutes before saving
     let finalTime = scheduleTime;
-    if (scheduleTime) {
+    if (isScheduled && scheduleTime) {
       const [h, m] = scheduleTime.split(':').map(Number);
       const roundedM = Math.round(m / 5) * 5;
       let finalH = h;
@@ -135,20 +140,22 @@ export default function CampaignModal({
         name,
         template_id: templateId,
         status,
-        schedule_days: scheduleDays,
-        schedule_time: finalTime,
+        schedule_days: isScheduled ? scheduleDays : [],
+        schedule_time: isScheduled ? finalTime : '00:00',
         target_tags: targetTags,
         smtp_setting_id: smtpSettingId,
+        dispatch_type: dispatchType,
       });
     } else {
       result = await createCampaign({
         name,
         template_id: templateId,
         status,
-        schedule_days: scheduleDays,
-        schedule_time: finalTime,
+        schedule_days: isScheduled ? scheduleDays : [],
+        schedule_time: isScheduled ? finalTime : '00:00',
         target_tags: targetTags,
         smtp_setting_id: smtpSettingId,
+        dispatch_type: dispatchType,
       });
     }
     setIsSubmitting(false);
@@ -303,118 +310,153 @@ export default function CampaignModal({
             )}
           </div>
 
-          {/* Days of the Week */}
+          {/* Tipo de Envio / Dispatch Type */}
           <div className="space-y-2">
             <label className="flex items-center gap-1.5 text-xs font-semibold text-[#002B6A]">
-              <Calendar className="h-3.5 w-3.5" /> Days of the Week <span className="text-rose-400">*</span>
+              <Calendar className="h-3.5 w-3.5" /> Tipo de Envio <span className="text-rose-400">*</span>
             </label>
-            <div className="flex flex-wrap gap-2">
-              {[
-                { key: 0, label: 'D' }, // Domingo
-                { key: 1, label: 'S' }, // Segunda
-                { key: 2, label: 'T' }, // Terça
-                { key: 3, label: 'Q' }, // Quarta
-                { key: 4, label: 'Q' }, // Quinta
-                { key: 5, label: 'S' }, // Sexta
-                { key: 6, label: 'S' }, // Sábado
-              ].map((day) => {
-                const isSelected = scheduleDays.includes(day.key);
-                return (
-                  <button
-                    key={day.key}
-                    type="button"
-                    onClick={() => {
-                      if (isSelected) {
-                        setScheduleDays(scheduleDays.filter((d) => d !== day.key));
-                      } else {
-                        setScheduleDays([...scheduleDays, day.key].sort());
-                      }
-                    }}
-                    className={`w-10 h-10 flex items-center justify-center rounded-full border text-xs font-bold transition-all cursor-pointer shadow-sm select-none ${
-                      isSelected
-                        ? 'bg-[#2D6BFF] text-white border-[#2D6BFF] ring-2 ring-[#2D6BFF]/20 scale-105'
-                        : 'bg-[#F7FAFF] text-[#475569] border-[#D8E0EA] hover:border-[#2D6BFF]/50 hover:bg-[#EAF2FF]'
-                    }`}
-                  >
-                    {day.label}
-                  </button>
-                );
-              })}
+            <div className="flex gap-4">
+              <button
+                type="button"
+                onClick={() => setDispatchType('scheduled')}
+                className={`flex-1 py-2.5 rounded-lg text-sm font-semibold border transition-all flex items-center justify-center gap-2 ${
+                  dispatchType === 'scheduled'
+                    ? 'bg-[#2D6BFF] text-white border-[#2D6BFF]'
+                    : 'bg-[#F7FAFF] text-[#475569] border-[#D8E0EA] hover:bg-[#EAF2FF] cursor-pointer'
+                }`}
+              >
+                Programar (Scheduled)
+              </button>
+              <button
+                type="button"
+                onClick={() => setDispatchType('immediate')}
+                className={`flex-1 py-2.5 rounded-lg text-sm font-semibold border transition-all flex items-center justify-center gap-2 ${
+                  dispatchType === 'immediate'
+                    ? 'bg-[#2D6BFF] text-white border-[#2D6BFF]'
+                    : 'bg-[#F7FAFF] text-[#475569] border-[#D8E0EA] hover:bg-[#EAF2FF] cursor-pointer'
+                }`}
+              >
+                Disparar no momento (Send now)
+              </button>
             </div>
           </div>
 
-          {/* Time Scheduler */}
-          <div className="space-y-2.5">
-            <label className="flex items-center gap-1.5 text-xs font-semibold text-[#002B6A]">
-              <Calendar className="h-3.5 w-3.5" /> Time <span className="text-rose-400">*</span>
-            </label>
-            
-            <div className="flex items-center gap-2">
-              <select
-                value={scheduleTime.split(':')[0] || '09'}
-                onChange={(e) => {
-                  const hour = e.target.value;
-                  const minute = scheduleTime.split(':')[1] || '00';
-                  setScheduleTime(`${hour}:${minute}`);
-                }}
-                className="flex-1 px-3 py-2.5 rounded-lg border border-[#D8E0EA] bg-[#F7FAFF] text-sm text-[#061A40] focus:outline-none focus:border-[#2D6BFF] focus:bg-white transition-all cursor-pointer font-semibold"
-              >
-                {Array.from({ length: 24 }).map((_, i) => {
-                  const h = String(i).padStart(2, '0');
-                  return <option key={h} value={h}>{h} h</option>;
-                })}
-              </select>
-
-              <span className="text-sm font-bold text-[#002B6A]">:</span>
-
-              <select
-                value={scheduleTime.split(':')[1] || '00'}
-                onChange={(e) => {
-                  const hour = scheduleTime.split(':')[0] || '09';
-                  const minute = e.target.value;
-                  setScheduleTime(`${hour}:${minute}`);
-                }}
-                className="flex-1 px-3 py-2.5 rounded-lg border border-[#D8E0EA] bg-[#F7FAFF] text-sm text-[#061A40] focus:outline-none focus:border-[#2D6BFF] focus:bg-white transition-all cursor-pointer font-semibold"
-              >
-                {Array.from({ length: 12 }).map((_, i) => {
-                  const m = String(i * 5).padStart(2, '0');
-                  return <option key={m} value={m}>{m} min</option>;
-                })}
-              </select>
-            </div>
-
-            {/* Quick Presets */}
-            <div className="space-y-1">
-              <span className="text-[10px] font-bold text-[#475569] uppercase tracking-wider">Presets</span>
-              <div className="flex flex-wrap gap-1.5">
-                {[
-                  { value: '09:00', label: 'Manhã (09:00)', icon: Sunrise },
-                  { value: '12:00', label: 'Almoço (12:00)', icon: Utensils },
-                  { value: '15:00', label: 'Tarde (15:00)', icon: Sun },
-                  { value: '18:00', label: 'Fim do dia (18:00)', icon: Sunset },
-                  { value: '21:00', label: 'Noite (21:00)', icon: Moon },
-                ].map((preset) => {
-                  const isPresetSelected = scheduleTime === preset.value;
-                  const Icon = preset.icon;
-                  return (
-                    <button
-                      key={preset.value}
-                      type="button"
-                      onClick={() => setScheduleTime(preset.value)}
-                      className={`px-2.5 py-1 rounded-full text-[10px] font-semibold border transition-all cursor-pointer flex items-center gap-1 ${
-                        isPresetSelected
-                          ? 'bg-[#2D6BFF]/10 text-[#2D6BFF] border-[#2D6BFF]/30 scale-105 font-bold shadow-sm'
-                          : 'bg-[#F7FAFF] text-[#475569] border-[#D8E0EA] hover:border-[#2D6BFF]/30 hover:bg-[#EAF2FF]'
-                      }`}
-                    >
-                      <Icon className="h-3.5 w-3.5" />
-                      <span>{preset.label}</span>
-                    </button>
-                  );
-                })}
+          {dispatchType === 'scheduled' && (
+            <>
+              {/* Days of the Week */}
+              <div className="space-y-2">
+                <label className="flex items-center gap-1.5 text-xs font-semibold text-[#002B6A]">
+                  <Calendar className="h-3.5 w-3.5" /> Days of the Week <span className="text-rose-400">*</span>
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { key: 0, label: 'D' }, // Domingo
+                    { key: 1, label: 'S' }, // Segunda
+                    { key: 2, label: 'T' }, // Terça
+                    { key: 3, label: 'Q' }, // Quarta
+                    { key: 4, label: 'Q' }, // Quinta
+                    { key: 5, label: 'S' }, // Sexta
+                    { key: 6, label: 'S' }, // Sábado
+                  ].map((day) => {
+                    const isSelected = scheduleDays.includes(day.key);
+                    return (
+                      <button
+                        key={day.key}
+                        type="button"
+                        onClick={() => {
+                          if (isSelected) {
+                            setScheduleDays(scheduleDays.filter((d) => d !== day.key));
+                          } else {
+                            setScheduleDays([...scheduleDays, day.key].sort());
+                          }
+                        }}
+                        className={`w-10 h-10 flex items-center justify-center rounded-full border text-xs font-bold transition-all cursor-pointer shadow-sm select-none ${
+                          isSelected
+                            ? 'bg-[#2D6BFF] text-white border-[#2D6BFF] ring-2 ring-[#2D6BFF]/20 scale-105'
+                            : 'bg-[#F7FAFF] text-[#475569] border-[#D8E0EA] hover:border-[#2D6BFF]/50 hover:bg-[#EAF2FF]'
+                        }`}
+                      >
+                        {day.label}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          </div>
+
+              {/* Time Scheduler */}
+              <div className="space-y-2.5">
+                <label className="flex items-center gap-1.5 text-xs font-semibold text-[#002B6A]">
+                  <Calendar className="h-3.5 w-3.5" /> Time <span className="text-rose-400">*</span>
+                </label>
+                
+                <div className="flex items-center gap-2">
+                  <select
+                    value={scheduleTime.split(':')[0] || '09'}
+                    onChange={(e) => {
+                      const hour = e.target.value;
+                      const minute = scheduleTime.split(':')[1] || '00';
+                      setScheduleTime(`${hour}:${minute}`);
+                    }}
+                    className="flex-1 px-3 py-2.5 rounded-lg border border-[#D8E0EA] bg-[#F7FAFF] text-sm text-[#061A40] focus:outline-none focus:border-[#2D6BFF] focus:bg-white transition-all cursor-pointer font-semibold"
+                  >
+                    {Array.from({ length: 24 }).map((_, i) => {
+                      const h = String(i).padStart(2, '0');
+                      return <option key={h} value={h}>{h} h</option>;
+                    })}
+                  </select>
+
+                  <span className="text-sm font-bold text-[#002B6A]">:</span>
+
+                  <select
+                    value={scheduleTime.split(':')[1] || '00'}
+                    onChange={(e) => {
+                      const hour = scheduleTime.split(':')[0] || '09';
+                      const minute = e.target.value;
+                      setScheduleTime(`${hour}:${minute}`);
+                    }}
+                    className="flex-1 px-3 py-2.5 rounded-lg border border-[#D8E0EA] bg-[#F7FAFF] text-sm text-[#061A40] focus:outline-none focus:border-[#2D6BFF] focus:bg-white transition-all cursor-pointer font-semibold"
+                  >
+                    {Array.from({ length: 12 }).map((_, i) => {
+                      const m = String(i * 5).padStart(2, '0');
+                      return <option key={m} value={m}>{m} min</option>;
+                    })}
+                  </select>
+                </div>
+
+                {/* Quick Presets */}
+                <div className="space-y-1">
+                  <span className="text-[10px] font-bold text-[#475569] uppercase tracking-wider">Presets</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[
+                      { value: '09:00', label: 'Manhã (09:00)', icon: Sunrise },
+                      { value: '12:00', label: 'Almoço (12:00)', icon: Utensils },
+                      { value: '15:00', label: 'Tarde (15:00)', icon: Sun },
+                      { value: '18:00', label: 'Fim do dia (18:00)', icon: Sunset },
+                      { value: '21:00', label: 'Noite (21:00)', icon: Moon },
+                    ].map((preset) => {
+                      const isPresetSelected = scheduleTime === preset.value;
+                      const Icon = preset.icon;
+                      return (
+                        <button
+                          key={preset.value}
+                          type="button"
+                          onClick={() => setScheduleTime(preset.value)}
+                          className={`px-2.5 py-1 rounded-full text-[10px] font-semibold border transition-all cursor-pointer flex items-center gap-1 ${
+                            isPresetSelected
+                              ? 'bg-[#2D6BFF]/10 text-[#2D6BFF] border-[#2D6BFF]/30 scale-105 font-bold shadow-sm'
+                              : 'bg-[#F7FAFF] text-[#475569] border-[#D8E0EA] hover:border-[#2D6BFF]/30 hover:bg-[#EAF2FF]'
+                          }`}
+                        >
+                          <Icon className="h-3.5 w-3.5" />
+                          <span>{preset.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
 
           {/* Status Selection */}
           <div className="space-y-2">

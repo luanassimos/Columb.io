@@ -9,9 +9,10 @@ interface SendSuccessModalProps {
   isOpen: boolean;
   onClose: () => void;
   emailSendMode?: EmailSendMode;
+  campaignId?: string;
 }
 
-export default function SendSuccessModal({ isOpen, onClose, emailSendMode = 'mock' }: SendSuccessModalProps) {
+export default function SendSuccessModal({ isOpen, onClose, emailSendMode = 'mock', campaignId }: SendSuccessModalProps) {
   const images = [
     '/fly01.webp',
     '/fly02.webp',
@@ -65,15 +66,11 @@ export default function SendSuccessModal({ isOpen, onClose, emailSendMode = 'moc
 
     const startTime = Date.now();
 
-    // 1. Start takeoff / flying to the right after 600ms
-    const takeoffTimer = setTimeout(() => {
-      setAnimationPhase('takeoff');
-    }, 600);
-
     let isSubscribed = true;
 
     // 2. Perform API call to force process campaigns
-    fetch('/api/send?force=true')
+    const url = campaignId ? `/api/send?force=true&campaign_id=${campaignId}` : '/api/send?force=true';
+    fetch(url)
       .then(async (res) => {
         if (!res.ok) {
           const errData = await res.json().catch(() => ({}));
@@ -84,16 +81,16 @@ export default function SendSuccessModal({ isOpen, onClose, emailSendMode = 'moc
       .then((data) => {
         if (!isSubscribed) return;
 
-        // Ensure the takeoff animation runs for at least 1.4s total before showing success
-        const elapsed = Date.now() - startTime;
-        const remaining = Math.max(0, 1400 - elapsed);
+        // Start flight animation upon successful request completion
+        setAnimationPhase('takeoff');
 
+        // Let the takeoff animation run for 1s (matching keyframes duration) before showing success state
         setTimeout(() => {
           if (!isSubscribed) return;
           setResult(data);
           setAnimationPhase('sent');
           setStatus('success');
-        }, remaining);
+        }, 1000);
       })
       .catch((err) => {
         if (!isSubscribed) return;
@@ -104,7 +101,6 @@ export default function SendSuccessModal({ isOpen, onClose, emailSendMode = 'moc
 
     return () => {
       isSubscribed = false;
-      clearTimeout(takeoffTimer);
     };
   }, [isOpen]);
 
@@ -190,12 +186,6 @@ export default function SendSuccessModal({ isOpen, onClose, emailSendMode = 'moc
               <h3 className="text-xl font-bold text-[#002B6A]">Disparo Concluído!</h3>
               
               <div className="text-xs text-[#475569] space-y-1.5 bg-slate-50 border border-slate-100 p-4 rounded-2xl text-left max-w-sm mx-auto shadow-sm">
-                <div className={`flex justify-between rounded-lg px-2 py-1 font-bold ${
-                  isLive ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
-                }`}>
-                  <span>Modo de envio:</span>
-                  <strong className="uppercase">{visibleModeLabel}</strong>
-                </div>
                 {result?.newJobsQueued !== undefined && (
                   <div className="flex justify-between">
                     <span>E-mails enfileirados:</span>
@@ -204,7 +194,7 @@ export default function SendSuccessModal({ isOpen, onClose, emailSendMode = 'moc
                 )}
                 {result?.sentCount !== undefined && (
                   <div className="flex justify-between">
-                    <span>{isLive ? 'E-mails enviados:' : 'E-mails simulados:'}</span>
+                    <span>E-mails enviados:</span>
                     <strong className="text-emerald-600">{result.sentCount}</strong>
                   </div>
                 )}

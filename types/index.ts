@@ -52,6 +52,7 @@ export interface Campaign {
   schedule_time: string;
   target_tags: string[];
   smtp_setting_id?: string | null;
+  dispatch_type: 'scheduled' | 'immediate';
   created_at: string;
   // Included in relations
   template?: Template;
