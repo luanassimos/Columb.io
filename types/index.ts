@@ -26,6 +26,7 @@ export interface Contact {
   linkedin_url?: string | null;
   tags: string[];
   status: ContactStatus;
+  rating: number; // 0 to 5 stars
   last_contact_at?: string | null;
   imported_at?: string | null;
   created_at: string;

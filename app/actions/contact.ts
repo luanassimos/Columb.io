@@ -15,6 +15,7 @@ export interface CreateContactInput {
   linkedin_url?: string;
   tags?: string[];
   status?: ContactStatus;
+  rating?: number;
 }
 
 export async function createContact(input: CreateContactInput) {
@@ -131,6 +132,7 @@ export async function createContact(input: CreateContactInput) {
       linkedin_url: input.linkedin_url?.trim() || null,
       tags: input.tags || [],
       status: input.status || 'new',
+      rating: input.rating !== undefined ? input.rating : 0,
       imported_at: new Date().toISOString(),
     })
     .select('id')
@@ -155,6 +157,7 @@ export interface UpdateContactInput {
   linkedin_url?: string;
   tags?: string[];
   status?: ContactStatus;
+  rating?: number;
 }
 
 export async function updateContact(input: UpdateContactInput) {
@@ -164,18 +167,24 @@ export async function updateContact(input: UpdateContactInput) {
   if (permissionError) return permissionError;
   const { supabase, workspaceId } = context;
 
+  const updatePayload: any = {
+    name: input.name.trim(),
+    company: input.company.trim(),
+    email: input.email.trim().toLowerCase(),
+    phone: input.phone?.trim() || null,
+    city: input.city?.trim() || null,
+    linkedin_url: input.linkedin_url?.trim() || null,
+    tags: input.tags || [],
+    status: input.status,
+  };
+
+  if (input.rating !== undefined) {
+    updatePayload.rating = input.rating;
+  }
+
   const { error } = await supabase
     .from('contacts')
-    .update({
-      name: input.name.trim(),
-      company: input.company.trim(),
-      email: input.email.trim().toLowerCase(),
-      phone: input.phone?.trim() || null,
-      city: input.city?.trim() || null,
-      linkedin_url: input.linkedin_url?.trim() || null,
-      tags: input.tags || [],
-      status: input.status,
-    })
+    .update(updatePayload)
     .eq('id', input.id)
     .eq('workspace_id', workspaceId);
 
