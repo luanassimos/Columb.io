@@ -1,15 +1,18 @@
 'use server';
 
-import { createServerClient } from '@/lib/supabase/server';
+import { getActiveWorkspaceContext } from '@/lib/workspace';
 import { revalidatePath } from 'next/cache';
 
 export async function markNotificationRead(notificationId: string) {
-  const supabase = await createServerClient();
+  const context = await getActiveWorkspaceContext();
+  if ('error' in context) return { error: context.error };
+  const { supabase, workspaceId } = context;
 
   const { error } = await supabase
     .from('notifications')
     .update({ read: true })
-    .eq('id', notificationId);
+    .eq('id', notificationId)
+    .eq('workspace_id', workspaceId);
 
   if (error) {
     console.error('Error marking notification as read:', error);
@@ -21,7 +24,13 @@ export async function markNotificationRead(notificationId: string) {
 }
 
 export async function markAllNotificationsRead(workspaceId: string) {
-  const supabase = await createServerClient();
+  const context = await getActiveWorkspaceContext();
+  if ('error' in context) return { error: context.error };
+  const { supabase, workspaceId: activeWorkspaceId } = context;
+
+  if (workspaceId !== activeWorkspaceId) {
+    return { error: 'You do not have access to this workspace' };
+  }
 
   const { error } = await supabase
     .from('notifications')

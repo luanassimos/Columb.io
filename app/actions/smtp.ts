@@ -1,30 +1,17 @@
 'use server';
 
-import { createServerClient } from '@/lib/supabase/server';
+import { getActiveWorkspaceContext } from '@/lib/workspace';
 import { revalidatePath } from 'next/cache';
-import { SmtpSettings } from '@/types';
 
 export async function getSmtpSettings() {
-  const supabase = await createServerClient();
-
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: 'Unauthorized' };
-
-  // Get active workspace from profile
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('workspace_id')
-    .eq('id', user.id)
-    .maybeSingle();
-
-  if (!profile?.workspace_id) {
-    return { error: 'Could not determine active workspace' };
-  }
+  const context = await getActiveWorkspaceContext();
+  if ('error' in context) return { error: context.error };
+  const { supabase, workspaceId } = context;
 
   const { data, error } = await supabase
     .from('smtp_settings')
     .select('*')
-    .eq('workspace_id', profile.workspace_id)
+    .eq('workspace_id', workspaceId)
     .order('created_at', { ascending: true });
 
   if (error) {
@@ -46,24 +33,12 @@ export interface SaveSmtpInput {
 }
 
 export async function saveSmtpSettings(input: SaveSmtpInput) {
-  const supabase = await createServerClient();
-
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: 'Unauthorized' };
-
-  // Get active workspace from profile
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('workspace_id')
-    .eq('id', user.id)
-    .maybeSingle();
-
-  if (!profile?.workspace_id) {
-    return { error: 'Could not determine active workspace' };
-  }
+  const context = await getActiveWorkspaceContext();
+  if ('error' in context) return { error: context.error };
+  const { supabase, workspaceId } = context;
 
   const updateData: any = {
-    workspace_id: profile.workspace_id,
+    workspace_id: workspaceId,
     host: input.host.trim(),
     port: input.port,
     secure: input.secure,
@@ -80,7 +55,8 @@ export async function saveSmtpSettings(input: SaveSmtpInput) {
     const { error: err } = await supabase
       .from('smtp_settings')
       .update(updateData)
-      .eq('id', input.id);
+      .eq('id', input.id)
+      .eq('workspace_id', workspaceId);
     error = err;
   } else {
     // For new insert, password must be present
@@ -103,15 +79,15 @@ export async function saveSmtpSettings(input: SaveSmtpInput) {
 }
 
 export async function deleteSmtpSettings(id: string) {
-  const supabase = await createServerClient();
-
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: 'Unauthorized' };
+  const context = await getActiveWorkspaceContext();
+  if ('error' in context) return { error: context.error };
+  const { supabase, workspaceId } = context;
 
   const { error } = await supabase
     .from('smtp_settings')
     .delete()
-    .eq('id', id);
+    .eq('id', id)
+    .eq('workspace_id', workspaceId);
 
   if (error) {
     console.error('Error deleting SMTP settings:', error);

@@ -1,42 +1,29 @@
 import React from 'react';
-import { createServerClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import { Contact } from '@/types';
 import ContactsClient from './contacts-client';
+import { getActiveWorkspaceContext } from '@/lib/workspace';
 
 export default async function ContactsPage() {
-  const supabase = await createServerClient();
+  const context = await getActiveWorkspaceContext();
+  if ('error' in context) {
+    if (context.error === 'Unauthorized') redirect('/login');
+    return <ContactsClient contacts={[]} />;
+  }
 
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
-
-  // Fetch active profile
-  let profile = null;
-  let workspaceId: string | null = null;
-  try {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', user.id)
-      .maybeSingle();
-    if (!error && data) {
-      profile = data;
-      workspaceId = data.workspace_id;
-    }
-  } catch {}
+  const { supabase, workspaceId } = context;
 
   // Fetch contacts for the active workspace
   let contacts: Contact[] = [];
-  if (workspaceId) {
-    try {
-      const { data, error } = await supabase
-        .from('contacts')
-        .select('*')
-        .eq('workspace_id', workspaceId)
-        .order('imported_at', { ascending: false });
+  try {
+    const { data, error } = await supabase
+      .from('contacts')
+      .select('*')
+      .eq('workspace_id', workspaceId)
+      .order('imported_at', { ascending: false });
 
-      if (!error) contacts = data || [];
-    } catch {}
-  }
+    if (!error) contacts = data || [];
+  } catch {}
+
   return <ContactsClient contacts={contacts} />;
 }

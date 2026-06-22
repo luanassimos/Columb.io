@@ -1,6 +1,7 @@
 'use server';
 
 import { createServerClient } from '@/lib/supabase/server';
+import { getActiveWorkspaceContext } from '@/lib/workspace';
 import { revalidatePath } from 'next/cache';
 import { ContactStatus } from '@/types';
 
@@ -34,6 +35,24 @@ export async function createContact(input: CreateContactInput) {
   }
 
   let workspaceId = profile?.workspace_id;
+
+  if (workspaceId && workspaceId !== 'default-workspace-id') {
+    const { data: activeMembership, error: activeMembershipError } = await supabase
+      .from('workspace_members')
+      .select('workspace_id')
+      .eq('workspace_id', workspaceId)
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (activeMembershipError) {
+      console.error('Error verifying active workspace membership:', activeMembershipError);
+      return { error: 'Database error verifying workspace access' };
+    }
+
+    if (!activeMembership) {
+      workspaceId = null;
+    }
+  }
 
   if (!workspaceId || workspaceId === 'default-workspace-id') {
     // 1. Try to find if user has any workspace membership
@@ -132,10 +151,9 @@ export interface UpdateContactInput {
 }
 
 export async function updateContact(input: UpdateContactInput) {
-  const supabase = await createServerClient();
-
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: 'Unauthorized' };
+  const context = await getActiveWorkspaceContext();
+  if ('error' in context) return { error: context.error };
+  const { supabase, workspaceId } = context;
 
   const { error } = await supabase
     .from('contacts')
@@ -149,7 +167,8 @@ export async function updateContact(input: UpdateContactInput) {
       tags: input.tags || [],
       status: input.status,
     })
-    .eq('id', input.id);
+    .eq('id', input.id)
+    .eq('workspace_id', workspaceId);
 
   if (error) {
     console.error('Error updating contact:', error);
@@ -161,15 +180,15 @@ export async function updateContact(input: UpdateContactInput) {
 }
 
 export async function deleteContact(id: string) {
-  const supabase = await createServerClient();
-
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: 'Unauthorized' };
+  const context = await getActiveWorkspaceContext();
+  if ('error' in context) return { error: context.error };
+  const { supabase, workspaceId } = context;
 
   const { error } = await supabase
     .from('contacts')
     .delete()
-    .eq('id', id);
+    .eq('id', id)
+    .eq('workspace_id', workspaceId);
 
   if (error) {
     console.error('Error deleting contact:', error);

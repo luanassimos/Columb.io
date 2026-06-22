@@ -1,6 +1,6 @@
 'use server';
 
-import { createServerClient } from '@/lib/supabase/server';
+import { getActiveWorkspaceContext } from '@/lib/workspace';
 import { revalidatePath } from 'next/cache';
 import { CampaignStatus } from '@/types';
 
@@ -25,27 +25,50 @@ export interface UpdateCampaignInput {
   smtp_setting_id?: string | null;
 }
 
-export async function createCampaign(input: CreateCampaignInput) {
-  const supabase = await createServerClient();
-
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: 'Unauthorized' };
-
-  // Get active workspace from profile
-  const { data: profile, error: pError } = await supabase
-    .from('profiles')
-    .select('workspace_id')
-    .eq('id', user.id)
+async function validateCampaignReferences(
+  supabase: any,
+  workspaceId: string,
+  input: { template_id: string; smtp_setting_id?: string | null }
+) {
+  const { data: template, error: templateError } = await supabase
+    .from('templates')
+    .select('id')
+    .eq('id', input.template_id)
+    .eq('workspace_id', workspaceId)
     .maybeSingle();
 
-  if (pError || !profile?.workspace_id) {
-    return { error: 'Could not determine active workspace' };
+  if (templateError || !template) {
+    return 'Selected template does not belong to the active workspace';
   }
+
+  if (input.smtp_setting_id) {
+    const { data: smtp, error: smtpError } = await supabase
+      .from('smtp_settings')
+      .select('id')
+      .eq('id', input.smtp_setting_id)
+      .eq('workspace_id', workspaceId)
+      .maybeSingle();
+
+    if (smtpError || !smtp) {
+      return 'Selected SMTP account does not belong to the active workspace';
+    }
+  }
+
+  return null;
+}
+
+export async function createCampaign(input: CreateCampaignInput) {
+  const context = await getActiveWorkspaceContext();
+  if ('error' in context) return { error: context.error };
+  const { supabase, workspaceId } = context;
+
+  const referenceError = await validateCampaignReferences(supabase, workspaceId, input);
+  if (referenceError) return { error: referenceError };
 
   const { data: campaign, error } = await supabase
     .from('campaigns')
     .insert({
-      workspace_id: profile.workspace_id,
+      workspace_id: workspaceId,
       name: input.name.trim(),
       template_id: input.template_id,
       status: input.status,
@@ -67,10 +90,12 @@ export async function createCampaign(input: CreateCampaignInput) {
 }
 
 export async function updateCampaign(input: UpdateCampaignInput) {
-  const supabase = await createServerClient();
+  const context = await getActiveWorkspaceContext();
+  if ('error' in context) return { error: context.error };
+  const { supabase, workspaceId } = context;
 
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: 'Unauthorized' };
+  const referenceError = await validateCampaignReferences(supabase, workspaceId, input);
+  if (referenceError) return { error: referenceError };
 
   const { error } = await supabase
     .from('campaigns')
@@ -83,7 +108,8 @@ export async function updateCampaign(input: UpdateCampaignInput) {
       target_tags: input.target_tags,
       smtp_setting_id: input.smtp_setting_id || null,
     })
-    .eq('id', input.id);
+    .eq('id', input.id)
+    .eq('workspace_id', workspaceId);
 
   if (error) {
     console.error('Error updating campaign:', error);
@@ -95,15 +121,15 @@ export async function updateCampaign(input: UpdateCampaignInput) {
 }
 
 export async function deleteCampaign(id: string) {
-  const supabase = await createServerClient();
-
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: 'Unauthorized' };
+  const context = await getActiveWorkspaceContext();
+  if ('error' in context) return { error: context.error };
+  const { supabase, workspaceId } = context;
 
   const { error } = await supabase
     .from('campaigns')
     .delete()
-    .eq('id', id);
+    .eq('id', id)
+    .eq('workspace_id', workspaceId);
 
   if (error) {
     console.error('Error deleting campaign:', error);
@@ -115,17 +141,17 @@ export async function deleteCampaign(id: string) {
 }
 
 export async function bulkUpdateCampaignStatus(ids: string[], status: CampaignStatus) {
-  const supabase = await createServerClient();
-
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: 'Unauthorized' };
+  const context = await getActiveWorkspaceContext();
+  if ('error' in context) return { error: context.error };
+  const { supabase, workspaceId } = context;
 
   if (ids.length === 0) return { success: true };
 
   const { error } = await supabase
     .from('campaigns')
     .update({ status })
-    .in('id', ids);
+    .in('id', ids)
+    .eq('workspace_id', workspaceId);
 
   if (error) {
     console.error('Error bulk updating campaigns status:', error);
@@ -137,17 +163,17 @@ export async function bulkUpdateCampaignStatus(ids: string[], status: CampaignSt
 }
 
 export async function bulkDeleteCampaigns(ids: string[]) {
-  const supabase = await createServerClient();
-
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: 'Unauthorized' };
+  const context = await getActiveWorkspaceContext();
+  if ('error' in context) return { error: context.error };
+  const { supabase, workspaceId } = context;
 
   if (ids.length === 0) return { success: true };
 
   const { error } = await supabase
     .from('campaigns')
     .delete()
-    .in('id', ids);
+    .in('id', ids)
+    .eq('workspace_id', workspaceId);
 
   if (error) {
     console.error('Error bulk deleting campaigns:', error);

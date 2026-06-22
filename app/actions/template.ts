@@ -1,6 +1,6 @@
 'use server';
 
-import { createServerClient } from '@/lib/supabase/server';
+import { getActiveWorkspaceContext } from '@/lib/workspace';
 import { revalidatePath } from 'next/cache';
 
 export interface CreateTemplateInput {
@@ -17,26 +17,14 @@ export interface UpdateTemplateInput {
 }
 
 export async function createTemplate(input: CreateTemplateInput) {
-  const supabase = await createServerClient();
-
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: 'Unauthorized' };
-
-  // Get active workspace from profile
-  const { data: profile, error: pError } = await supabase
-    .from('profiles')
-    .select('workspace_id')
-    .eq('id', user.id)
-    .maybeSingle();
-
-  if (pError || !profile?.workspace_id) {
-    return { error: 'Could not determine active workspace' };
-  }
+  const context = await getActiveWorkspaceContext();
+  if ('error' in context) return { error: context.error };
+  const { supabase, workspaceId } = context;
 
   const { data: template, error } = await supabase
     .from('templates')
     .insert({
-      workspace_id: profile.workspace_id,
+      workspace_id: workspaceId,
       name: input.name.trim(),
       subject: input.subject.trim(),
       body: input.body,
@@ -54,10 +42,9 @@ export async function createTemplate(input: CreateTemplateInput) {
 }
 
 export async function updateTemplate(input: UpdateTemplateInput) {
-  const supabase = await createServerClient();
-
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: 'Unauthorized' };
+  const context = await getActiveWorkspaceContext();
+  if ('error' in context) return { error: context.error };
+  const { supabase, workspaceId } = context;
 
   const { error } = await supabase
     .from('templates')
@@ -66,7 +53,8 @@ export async function updateTemplate(input: UpdateTemplateInput) {
       subject: input.subject.trim(),
       body: input.body,
     })
-    .eq('id', input.id);
+    .eq('id', input.id)
+    .eq('workspace_id', workspaceId);
 
   if (error) {
     console.error('Error updating template:', error);
@@ -78,15 +66,15 @@ export async function updateTemplate(input: UpdateTemplateInput) {
 }
 
 export async function deleteTemplate(id: string) {
-  const supabase = await createServerClient();
-
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: 'Unauthorized' };
+  const context = await getActiveWorkspaceContext();
+  if ('error' in context) return { error: context.error };
+  const { supabase, workspaceId } = context;
 
   const { error } = await supabase
     .from('templates')
     .delete()
-    .eq('id', id);
+    .eq('id', id)
+    .eq('workspace_id', workspaceId);
 
   if (error) {
     console.error('Error deleting template:', error);

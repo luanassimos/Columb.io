@@ -1,25 +1,24 @@
 import React from 'react';
-import { createServerClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import { Campaign, Template, SmtpSettings } from '@/types';
 import CampaignsClient from './campaigns-client';
+import { getActiveWorkspaceContext } from '@/lib/workspace';
 
 export default async function CampaignsPage() {
-  const supabase = await createServerClient();
+  const context = await getActiveWorkspaceContext();
+  if ('error' in context) {
+    if (context.error === 'Unauthorized') redirect('/login');
+    return (
+      <CampaignsClient
+        campaigns={[]}
+        templates={[]}
+        availableTags={[]}
+        smtpSettingsList={[]}
+      />
+    );
+  }
 
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
-
-  // Get active workspace from profile
-  let workspaceId: string | null = null;
-  try {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('workspace_id')
-      .eq('id', user.id)
-      .maybeSingle();
-    workspaceId = profile?.workspace_id || null;
-  } catch {}
+  const { supabase, workspaceId } = context;
 
   // Fetch campaigns and templates for active workspace
   let campaigns: Campaign[] = [];
@@ -27,46 +26,44 @@ export default async function CampaignsPage() {
   let availableTags: string[] = [];
   let smtpSettingsList: SmtpSettings[] = [];
   
-  if (workspaceId) {
-    try {
-      // Fetch templates
-      const { data: tData } = await supabase
-        .from('templates')
-        .select('*')
-        .eq('workspace_id', workspaceId)
-        .order('created_at', { ascending: false });
-      
-      templates = tData || [];
+  try {
+    // Fetch templates
+    const { data: tData } = await supabase
+      .from('templates')
+      .select('*')
+      .eq('workspace_id', workspaceId)
+      .order('created_at', { ascending: false });
+    
+    templates = tData || [];
 
-      // Fetch campaigns with templates joined
-      const { data: cData, error } = await supabase
-        .from('campaigns')
-        .select('*, templates(*)')
-        .eq('workspace_id', workspaceId)
-        .order('created_at', { ascending: false });
+    // Fetch campaigns with templates joined
+    const { data: cData, error } = await supabase
+      .from('campaigns')
+      .select('*, templates(*)')
+      .eq('workspace_id', workspaceId)
+      .order('created_at', { ascending: false });
 
-      if (!error) campaigns = cData || [];
+    if (!error) campaigns = cData || [];
 
-      // Fetch unique tags from contacts
-      const { data: contactsData } = await supabase
-        .from('contacts')
-        .select('tags')
-        .eq('workspace_id', workspaceId);
-      
-      if (contactsData) {
-        const allTags = contactsData.flatMap(c => c.tags || []);
-        availableTags = Array.from(new Set(allTags)).sort();
-      }
+    // Fetch unique tags from contacts
+    const { data: contactsData } = await supabase
+      .from('contacts')
+      .select('tags')
+      .eq('workspace_id', workspaceId);
+    
+    if (contactsData) {
+      const allTags = contactsData.flatMap(c => c.tags || []);
+      availableTags = Array.from(new Set(allTags)).sort();
+    }
 
-      // Fetch workspace SMTP settings list
-      const { data: smtpData } = await supabase
-        .from('smtp_settings')
-        .select('*')
-        .eq('workspace_id', workspaceId)
-        .order('created_at', { ascending: true });
-      smtpSettingsList = smtpData || [];
-    } catch {}
-  }
+    // Fetch workspace SMTP settings list
+    const { data: smtpData } = await supabase
+      .from('smtp_settings')
+      .select('*')
+      .eq('workspace_id', workspaceId)
+      .order('created_at', { ascending: true });
+    smtpSettingsList = smtpData || [];
+  } catch {}
 
   return (
     <CampaignsClient

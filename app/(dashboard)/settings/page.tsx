@@ -43,7 +43,7 @@ export default async function SettingsPage() {
   }
 
   const activeWorkspace = (profile && workspaces?.find(w => w.id === profile.workspace_id)) || {
-    id: profile?.workspace_id || 'default-workspace-id',
+    id: 'default-workspace-id',
     name: 'Default Workspace',
   };
 
@@ -71,6 +71,18 @@ export default async function SettingsPage() {
     if (!name || !timezone || activeWorkspace.id === 'default-workspace-id') return;
 
     const serverSupabase = await createServerClient();
+    const { data: { user } } = await serverSupabase.auth.getUser();
+    if (!user) return;
+
+    const { data: member } = await serverSupabase
+      .from('workspace_members')
+      .select('workspace_id')
+      .eq('workspace_id', activeWorkspace.id)
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (!member) return;
+
     await serverSupabase
       .from('workspaces')
       .update({ name, timezone })

@@ -52,10 +52,18 @@ export async function sendEmail({
       
       let smtp = null;
       if (smtpSettingId) {
+        if (!workspaceId) {
+          return {
+            success: false,
+            error: 'Workspace scope is required for SMTP delivery',
+          };
+        }
+
         const { data } = await supabase
           .from('smtp_settings')
           .select('*')
           .eq('id', smtpSettingId)
+          .eq('workspace_id', workspaceId)
           .maybeSingle();
         smtp = data;
       } else if (workspaceId) {

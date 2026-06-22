@@ -1,6 +1,6 @@
 import React from 'react';
-import { createServerClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
+import { getActiveWorkspaceContext } from '@/lib/workspace';
 import {
   Inbox,
   Brain,
@@ -11,38 +11,12 @@ import {
 } from 'lucide-react';
 
 export default async function DashboardPage() {
-  const supabase = await createServerClient();
-
-  // 1. Get user session
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) {
-    redirect('/login');
+  const context = await getActiveWorkspaceContext();
+  if ('error' in context) {
+    if (context.error === 'Unauthorized') redirect('/login');
   }
-
-  console.log('SESSION_FOUND');
-
-  // 2. Try fetching active profile and workspace ID
-  console.log('PROFILE_FETCH_STARTED');
-  let workspaceId = null;
-  try {
-    const { data: profile, error: pError } = await supabase
-      .from('profiles')
-      .select('workspace_id')
-      .eq('id', user.id)
-      .maybeSingle();
-
-    if (pError) {
-      console.log('PROFILE_FETCH_FAILED');
-      console.log('Error fetching profile in dashboard page:', pError.message || pError);
-    } else if (profile) {
-      workspaceId = profile.workspace_id;
-    } else {
-      console.log('PROFILE_FETCH_FAILED');
-    }
-  } catch (err) {
-    console.log('PROFILE_FETCH_FAILED');
-    console.log('Exception fetching profile in dashboard page:', err);
-  }
+  const supabase = 'error' in context ? null : context.supabase;
+  const workspaceId = 'error' in context ? null : context.workspaceId;
 
   // 3. Fetch workflow metrics under active workspace (or all if enforcement disabled)
   let totalContacts = 0;
@@ -52,11 +26,9 @@ export default async function DashboardPage() {
   let repliedEmails = 0;
 
   // A. Receber: Fetch Total Contacts
-  try {
+  if (supabase && workspaceId) try {
     let query = supabase.from('contacts').select('*', { count: 'exact', head: true });
-    if (workspaceId) {
-      query = query.eq('workspace_id', workspaceId);
-    }
+    query = query.eq('workspace_id', workspaceId);
     const { count, error } = await query;
     if (error) {
       console.error('Error fetching contacts count in dashboard:', error.message || error);
@@ -68,14 +40,12 @@ export default async function DashboardPage() {
   }
 
   // B. Entender: Fetch Segmented Leads (status !== 'new')
-  try {
+  if (supabase && workspaceId) try {
     let query = supabase
       .from('contacts')
       .select('*', { count: 'exact', head: true })
       .not('status', 'eq', 'new');
-    if (workspaceId) {
-      query = query.eq('workspace_id', workspaceId);
-    }
+    query = query.eq('workspace_id', workspaceId);
     const { count, error } = await query;
     if (error) {
       console.error('Error fetching understood contacts count in dashboard:', error.message || error);
@@ -87,11 +57,9 @@ export default async function DashboardPage() {
   }
 
   // C. Preparar Resposta: Fetch Templates count
-  try {
+  if (supabase && workspaceId) try {
     let query = supabase.from('templates').select('*', { count: 'exact', head: true });
-    if (workspaceId) {
-      query = query.eq('workspace_id', workspaceId);
-    }
+    query = query.eq('workspace_id', workspaceId);
     const { count, error } = await query;
     if (error) {
       console.error('Error fetching templates count in dashboard:', error.message || error);
@@ -103,14 +71,12 @@ export default async function DashboardPage() {
   }
 
   // D. Enviar ou Escalar: Fetch sent and replied email jobs
-  try {
+  if (supabase && workspaceId) try {
     let query = supabase
       .from('email_jobs')
       .select('*', { count: 'exact', head: true })
       .in('status', ['sent', 'opened', 'replied']);
-    if (workspaceId) {
-      query = query.eq('workspace_id', workspaceId);
-    }
+    query = query.eq('workspace_id', workspaceId);
     const { count, error } = await query;
     if (error) {
       console.error('Error fetching sent emails count in dashboard:', error.message || error);
@@ -121,14 +87,12 @@ export default async function DashboardPage() {
     console.error('Exception fetching sent emails count in dashboard:', err);
   }
 
-  try {
+  if (supabase && workspaceId) try {
     let query = supabase
       .from('email_jobs')
       .select('*', { count: 'exact', head: true })
       .eq('status', 'replied');
-    if (workspaceId) {
-      query = query.eq('workspace_id', workspaceId);
-    }
+    query = query.eq('workspace_id', workspaceId);
     const { count, error } = await query;
     if (error) {
       console.error('Error fetching replied emails count in dashboard:', error.message || error);

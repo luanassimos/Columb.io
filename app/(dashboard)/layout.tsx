@@ -67,19 +67,20 @@ export default async function DashboardLayout({
   }
 
   // Fallback workspace handling
-  const activeWorkspace = (profile && workspacesList.find((w) => w.id === profile.workspace_id)) || {
-    id: profile?.workspace_id || 'default-workspace-id',
+  const activeWorkspace = profile ? workspacesList.find((w) => w.id === profile.workspace_id) : null;
+  const displayedWorkspace = activeWorkspace || {
+    id: 'default-workspace-id',
     name: 'Default Workspace',
   };
 
   // 4. Get recent notifications
   let notificationsList: any[] = [];
-  if (profile?.workspace_id) {
+  if (activeWorkspace?.id) {
     try {
       const { data: notifications, error: nError } = await supabase
         .from('notifications')
         .select('*')
-        .eq('workspace_id', profile.workspace_id)
+        .eq('workspace_id', activeWorkspace.id)
         .order('read', { ascending: true })
         .order('created_at', { ascending: false })
         .limit(15);
@@ -111,8 +112,8 @@ export default async function DashboardLayout({
           <div className="flex items-center gap-3">
             <WorkspaceSwitcher
               workspaces={workspacesList}
-              activeWorkspaceId={activeWorkspace.id}
-              activeWorkspaceName={activeWorkspace.name}
+              activeWorkspaceId={displayedWorkspace.id}
+              activeWorkspaceName={displayedWorkspace.name}
             />
             <HeaderTestButton />
           </div>
@@ -122,7 +123,7 @@ export default async function DashboardLayout({
             {/* Notification icon */}
             <NotificationCenter
               notifications={notificationsList}
-              workspaceId={activeWorkspace.id}
+              workspaceId={displayedWorkspace.id}
             />
 
             {/* Profile menu */}
