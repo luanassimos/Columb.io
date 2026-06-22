@@ -127,6 +127,50 @@ export default function SendSuccessModal({ isOpen, onClose, emailSendMode = 'moc
         .animate-pigeon-fly {
           animation: flyRight 1s cubic-bezier(0.4, 0, 0.2, 1) forwards;
         }
+
+        /* Light CSS Clouds */
+        .cloud {
+          background: #ffffff;
+          border-radius: 100px;
+          position: absolute;
+          width: 80px;
+          height: 25px;
+          box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.05);
+        }
+        .cloud::after, .cloud::before {
+          content: '';
+          position: absolute;
+          background: #ffffff;
+          z-index: -1;
+        }
+        .cloud::after {
+          width: 35px;
+          height: 35px;
+          top: -15px;
+          left: 10px;
+          border-radius: 100px;
+        }
+        .cloud::before {
+          width: 45px;
+          height: 45px;
+          top: -25px;
+          right: 10px;
+          border-radius: 100px;
+        }
+
+        @keyframes drift {
+          0% { transform: translateX(260px); }
+          100% { transform: translateX(-160px); }
+        }
+        .cloud-1 {
+          animation: drift 25s linear infinite;
+        }
+        .cloud-2 {
+          animation: drift 15s linear infinite;
+        }
+        .cloud-3 {
+          animation: drift 35s linear infinite;
+        }
       `}</style>
 
       <div className="relative w-full max-w-md bg-white rounded-3xl border border-[#D8E0EA] p-8 shadow-2xl overflow-hidden mx-4 text-center">
@@ -139,7 +183,13 @@ export default function SendSuccessModal({ isOpen, onClose, emailSendMode = 'moc
         </button>
 
         {/* Animation Container */}
-        <div className="relative w-full h-40 bg-[#EAF2FF]/50 border border-[#D8E0EA]/40 rounded-2xl flex items-center justify-center overflow-hidden mb-6">
+        <div className="relative w-full h-40 bg-gradient-to-b from-[#EAF2FF] to-[#D5E3FC] border border-[#D8E0EA]/40 rounded-2xl flex items-center justify-center overflow-hidden mb-6">
+          {/* Drifting Clouds */}
+          <div className="absolute inset-0 pointer-events-none overflow-hidden opacity-60">
+            <div className="cloud cloud-1 top-6 scale-75 opacity-80" style={{ left: '-80px', animationDelay: '0s' }}></div>
+            <div className="cloud cloud-2 top-16 scale-50 opacity-60" style={{ left: '-80px', animationDelay: '-5s' }}></div>
+            <div className="cloud cloud-3 top-4 scale-[0.6] opacity-75" style={{ left: '-80px', animationDelay: '-12s' }}></div>
+          </div>
           
           {/* Animated Pigeon */}
           {animationPhase !== 'sent' && status !== 'error' && (

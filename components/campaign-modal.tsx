@@ -54,6 +54,9 @@ export default function CampaignModal({
     }
   }, [isOpen]);
 
+  const [alreadySentCount, setAlreadySentCount] = useState<number>(0);
+  const [checkingOverlap, setCheckingOverlap] = useState<boolean>(false);
+
   // Sync state with campaignToEdit when modal opens or template changes
   useEffect(() => {
     if (isOpen) {
@@ -81,6 +84,71 @@ export default function CampaignModal({
       setError(null);
     }
   }, [isOpen, campaignToEdit, templates, smtpSettingsList, canManageStatus]);
+
+  // Check if template has already been sent to contacts matching the target tags
+  useEffect(() => {
+    if (!isOpen || !templateId || targetTags.length === 0) {
+      setAlreadySentCount(0);
+      return;
+    }
+
+    const checkOverlap = async () => {
+      setCheckingOverlap(true);
+      try {
+        const { createBrowserClient } = await import('@/lib/supabase/client');
+        const supabase = createBrowserClient();
+
+        // 1. Get contacts in the workspace to filter matching tags
+        const { data: contacts, error: contactsErr } = await supabase
+          .from('contacts')
+          .select('id, tags');
+
+        if (contactsErr || !contacts) {
+          setAlreadySentCount(0);
+          return;
+        }
+
+        const matchingContactIds = contacts
+          .filter(c => {
+            const contactTags = c.tags || [];
+            return targetTags.some((tag: string) => contactTags.includes(tag));
+          })
+          .map(c => c.id);
+
+        if (matchingContactIds.length === 0) {
+          setAlreadySentCount(0);
+          return;
+        }
+
+        // 2. Count email jobs that have already sent this template to these contacts
+        const { count, error: jobsErr } = await supabase
+          .from('email_jobs')
+          .select('id', { count: 'exact', head: true })
+          .eq('template_id', templateId)
+          .eq('status', 'sent')
+          .in('contact_id', matchingContactIds);
+
+        if (jobsErr) {
+          setAlreadySentCount(0);
+          return;
+        }
+
+        setAlreadySentCount(count || 0);
+      } catch (err) {
+        console.error('Error checking template overlap:', err);
+        setAlreadySentCount(0);
+      } finally {
+        setCheckingOverlap(false);
+      }
+    };
+
+    // Debounce checks slightly to avoid excessive queries during tag selection
+    const delayDebounce = setTimeout(() => {
+      checkOverlap();
+    }, 300);
+
+    return () => clearTimeout(delayDebounce);
+  }, [isOpen, templateId, targetTags]);
 
   // Close on Escape
   useEffect(() => {
@@ -298,8 +366,8 @@ export default function CampaignModal({
                       }}
                       className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer select-none ${
                         isSelected
-                          ? 'bg-[#2D6BFF] text-white border-[#2D6BFF] font-bold shadow-sm'
-                          : 'bg-white text-[#475569] border-[#D8E0EA] hover:bg-[#EAF2FF] hover:border-[#2D6BFF]/30'
+                           ? 'bg-[#2D6BFF] text-white border-[#2D6BFF] font-bold shadow-sm'
+                           : 'bg-white text-[#475569] border-[#D8E0EA] hover:bg-[#EAF2FF] hover:border-[#2D6BFF]/30'
                       }`}
                     >
                       {tag}
@@ -309,6 +377,19 @@ export default function CampaignModal({
               </div>
             )}
           </div>
+
+          {/* Warning if already sent to any target contact */}
+          {alreadySentCount > 0 && (
+            <div className="p-3 bg-amber-50 border border-amber-200 text-xs rounded-xl flex items-start gap-2.5">
+              <span className="text-sm">⚠️</span>
+              <div>
+                <p className="font-bold text-amber-900">Aviso de Envio Duplicado</p>
+                <p className="font-medium text-amber-800 mt-0.5 leading-normal">
+                  Este modelo de e-mail já foi enviado anteriormente para <strong>{alreadySentCount} contato{alreadySentCount > 1 ? 's' : ''}</strong> que possui{alreadySentCount > 1 ? 'm' : ' a'} as tags selecionadas.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Tipo de Envio / Dispatch Type */}
           <div className="space-y-2">

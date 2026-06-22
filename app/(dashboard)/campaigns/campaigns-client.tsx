@@ -206,6 +206,17 @@ export default function CampaignsClient({
     }
   };
 
+  const getStatusPriority = (status: CampaignStatus) => {
+    switch (status) {
+      case 'running': return 1;
+      case 'queued': return 1;
+      case 'draft': return 2;
+      case 'cancelled': return 2;
+      case 'completed': return 3;
+      default: return 4;
+    }
+  };
+
   const filtered = campaigns
     .filter(c => {
       // Filter by active/paused/completed groups
@@ -227,6 +238,15 @@ export default function CampaignsClient({
       );
     })
     .sort((a, b) => {
+      // If using the default sort (created_at desc), prioritize active statuses first
+      if (sortKey === 'created_at' && sortDir === 'desc') {
+        const prioA = getStatusPriority(a.status);
+        const prioB = getStatusPriority(b.status);
+        if (prioA !== prioB) {
+          return prioA - prioB; // Lower priority number (active) goes on top
+        }
+      }
+
       const av = (a[sortKey] ?? '') as string;
       const bv = (b[sortKey] ?? '') as string;
       return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
