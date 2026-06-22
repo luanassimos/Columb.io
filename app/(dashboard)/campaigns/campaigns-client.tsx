@@ -614,15 +614,20 @@ export default function CampaignsClient({
                   </tr>
                 ) : (
                   filteredLogs.map(job => (
-                    <tr key={job.id} className="hover:bg-[#F7FAFF] transition-colors">
+                    <tr
+                      key={job.id}
+                      onClick={() => router.push(`/inbox?tab=sent&id=${job.id}`)}
+                      className="hover:bg-[#F7FAFF] transition-colors cursor-pointer select-none"
+                    >
                       <td className="px-4 py-3">
                         <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold border capitalize ${
                           job.status === 'sent' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
+                          job.status === 'replied' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
                           job.status === 'failed' ? 'bg-rose-50 text-rose-600 border-rose-100' :
                           job.status === 'sending' ? 'bg-amber-50 text-amber-600 border-amber-100' :
                           'bg-blue-50 text-[#2D6BFF] border border-blue-100'
                         }`}>
-                          {job.status}
+                          {job.status === 'replied' ? 'sent' : job.status}
                         </span>
                       </td>
                       <td className="px-4 py-3">
