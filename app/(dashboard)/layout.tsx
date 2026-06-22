@@ -7,6 +7,7 @@ import Sidebar from '@/components/sidebar';
 import { User } from 'lucide-react';
 import HeaderTestButton from '@/components/header-test-button';
 import { WorkspaceRole } from '@/lib/permissions';
+import { getEmailSendMode } from '@/lib/email-mode';
 
 export default async function DashboardLayout({
   children,
@@ -14,6 +15,7 @@ export default async function DashboardLayout({
   children: React.ReactNode;
 }) {
   const supabase = await createServerClient();
+  const emailSendMode = getEmailSendMode();
 
   // 1. Get auth user
   const { data: { user } } = await supabase.auth.getUser();
@@ -122,7 +124,7 @@ export default async function DashboardLayout({
               activeWorkspaceName={displayedWorkspace.name}
               activeWorkspaceRole={activeWorkspaceRole}
             />
-            <HeaderTestButton />
+            <HeaderTestButton emailSendMode={emailSendMode} />
           </div>
 
           {/* Right Header items (Notification icon & Profile menu) */}

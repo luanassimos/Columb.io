@@ -3,13 +3,15 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, X, Send } from 'lucide-react';
+import type { EmailSendMode } from '@/lib/email-mode';
 
 interface SendSuccessModalProps {
   isOpen: boolean;
   onClose: () => void;
+  emailSendMode?: EmailSendMode;
 }
 
-export default function SendSuccessModal({ isOpen, onClose }: SendSuccessModalProps) {
+export default function SendSuccessModal({ isOpen, onClose, emailSendMode = 'mock' }: SendSuccessModalProps) {
   const images = [
     '/fly01.webp',
     '/fly02.webp',
@@ -24,11 +26,15 @@ export default function SendSuccessModal({ isOpen, onClose }: SendSuccessModalPr
   const [status, setStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [result, setResult] = useState<{
+    emailSendMode?: EmailSendMode;
     newJobsQueued?: number;
     sentCount?: number;
     failedCount?: number;
     message?: string;
   } | null>(null);
+  const visibleMode = result?.emailSendMode || emailSendMode;
+  const visibleModeLabel = visibleMode === 'dry_run' ? 'dry run' : visibleMode;
+  const isLive = visibleMode === 'live';
 
   useEffect(() => {
     setMounted(true);
@@ -184,6 +190,12 @@ export default function SendSuccessModal({ isOpen, onClose }: SendSuccessModalPr
               <h3 className="text-xl font-bold text-[#002B6A]">Disparo Concluído!</h3>
               
               <div className="text-xs text-[#475569] space-y-1.5 bg-slate-50 border border-slate-100 p-4 rounded-2xl text-left max-w-sm mx-auto shadow-sm">
+                <div className={`flex justify-between rounded-lg px-2 py-1 font-bold ${
+                  isLive ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+                }`}>
+                  <span>Modo de envio:</span>
+                  <strong className="uppercase">{visibleModeLabel}</strong>
+                </div>
                 {result?.newJobsQueued !== undefined && (
                   <div className="flex justify-between">
                     <span>E-mails enfileirados:</span>
@@ -192,7 +204,7 @@ export default function SendSuccessModal({ isOpen, onClose }: SendSuccessModalPr
                 )}
                 {result?.sentCount !== undefined && (
                   <div className="flex justify-between">
-                    <span>E-mails enviados via SMTP:</span>
+                    <span>{isLive ? 'E-mails enviados:' : 'E-mails simulados:'}</span>
                     <strong className="text-emerald-600">{result.sentCount}</strong>
                   </div>
                 )}

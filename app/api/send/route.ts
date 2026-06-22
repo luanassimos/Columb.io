@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { compileEmail } from '@/services/email-compiler';
 import { sendEmail } from '@/services/resend';
 import { canSendCampaigns, WorkspaceRole } from '@/lib/permissions';
+import { assertLiveEmailAllowed, getEmailSendMode } from '@/lib/email-mode';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -34,7 +35,7 @@ type ExecutionContext =
 type AuthResult = ExecutionContext | { response: Response };
 
 function jsonError(message: string, status: number) {
-  return Response.json({ error: message }, { status });
+  return Response.json({ error: message, emailSendMode: getEmailSendMode() }, { status });
 }
 
 async function getExecutionContext(
@@ -137,8 +138,22 @@ async function processQueue({
   context: ExecutionContext;
 }) {
   const scopedWorkspaceId = context.workspaceId;
+  const emailSendMode = getEmailSendMode();
+  const liveGuard = assertLiveEmailAllowed();
+
+  if (liveGuard) {
+    return Response.json(
+      {
+        success: false,
+        error: liveGuard.error,
+        emailSendMode,
+      },
+      { status: 400 }
+    );
+  }
+
   console.log(
-    `[Cron Job] Triggering campaign dispatch processor (force=${force}, scope=${scopedWorkspaceId || 'all-scheduled'})...`
+    `[Cron Job] Triggering campaign dispatch processor (force=${force}, scope=${scopedWorkspaceId || 'all-scheduled'}, emailMode=${emailSendMode})...`
   );
   const supabase = createAdminClient();
 
@@ -156,7 +171,7 @@ async function processQueue({
 
   if (cError) {
     console.error('[Cron Job] Error fetching campaigns:', cError);
-    return Response.json({ success: false, error: cError.message }, { status: 500 });
+    return Response.json({ success: false, error: cError.message, emailSendMode }, { status: 500 });
   }
 
   if (!runningCampaigns || runningCampaigns.length === 0) {
@@ -164,6 +179,7 @@ async function processQueue({
     return Response.json({
       success: true,
       message: 'No running campaigns to process',
+      emailSendMode,
       processedCampaigns: 0,
     });
   }
@@ -293,7 +309,7 @@ async function processQueue({
 
   if (queueFetchErr) {
     console.error('[Cron Job] Error fetching queued jobs:', queueFetchErr);
-    return Response.json({ success: false, error: queueFetchErr.message }, { status: 500 });
+    return Response.json({ success: false, error: queueFetchErr.message, emailSendMode }, { status: 500 });
   }
 
   console.log(`[Cron Job] Processing ${queuedJobs?.length || 0} queued email jobs...`);
@@ -355,7 +371,9 @@ async function processQueue({
           .update({
             status: 'sent',
             sent_at: new Date().toISOString(),
-            error_message: null,
+            error_message: result.provider === 'smtp' || result.provider === 'resend'
+              ? null
+              : `${result.mode} mode: provider delivery skipped`,
           })
           .eq('id', job.id);
 
@@ -396,6 +414,7 @@ async function processQueue({
   return Response.json({
     success: true,
     message: 'Campaign processing run completed successfully.',
+    emailSendMode,
     timestamp: new Date().toISOString(),
     activeCampaignsProcessed: activeCampaigns.length,
     newJobsQueued,

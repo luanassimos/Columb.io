@@ -1,13 +1,28 @@
 import { Resend } from 'resend';
 import nodemailer from 'nodemailer';
-
-const resendApiKey = process.env.RESEND_API_KEY;
-
-// Initialize Resend if API key is provided
-const resend = resendApiKey ? new Resend(resendApiKey) : null;
+import {
+  assertLiveEmailAllowed,
+  getEmailSendMode,
+  getSafeRecipientOverride,
+  shouldSendLiveEmail,
+  type EmailSendMode,
+} from '@/lib/email-mode';
 
 // Default sender address for Resend sandbox
 const DEFAULT_FROM = process.env.NEXT_PUBLIC_FROM_EMAIL || 'Columb Outreach <onboarding@resend.dev>';
+
+let resendClient: Resend | null = null;
+
+function getResendClient() {
+  const resendApiKey = process.env.RESEND_API_KEY?.trim();
+  if (!resendApiKey) return null;
+
+  if (!resendClient) {
+    resendClient = new Resend(resendApiKey);
+  }
+
+  return resendClient;
+}
 
 interface SendEmailParams {
   to: string;
@@ -23,6 +38,9 @@ interface SendEmailResult {
   success: boolean;
   id?: string;
   error?: string;
+  mode: EmailSendMode;
+  recipient: string;
+  provider?: 'mock' | 'dry_run' | 'smtp' | 'resend';
 }
 
 export async function sendEmail({
@@ -34,9 +52,33 @@ export async function sendEmail({
   smtpSettingId,
   useAdmin = false,
 }: SendEmailParams): Promise<SendEmailResult> {
-  console.log(`[Email Service] Attempting to send email to: ${to}`);
+  const mode = getEmailSendMode();
+  const safeRecipientOverride = getSafeRecipientOverride();
+  const effectiveRecipient = safeRecipientOverride || to;
+
+  console.log(`[Email Service] Mode: ${mode}. Preparing email to: ${effectiveRecipient}`);
   console.log(`[Email Service] Subject: "${subject}"`);
-  console.log(`[Email Service] Body preview: "${body.substring(0, 100)}..."`);
+
+  const liveGuard = assertLiveEmailAllowed();
+  if (liveGuard) {
+    return {
+      success: false,
+      error: liveGuard.error,
+      mode,
+      recipient: effectiveRecipient,
+    };
+  }
+
+  if (!shouldSendLiveEmail()) {
+    console.log(`[Email Service] ${mode} mode active. Provider delivery skipped.`);
+    return {
+      success: true,
+      id: `${mode}-email-${Math.random().toString(36).substring(2, 11)}`,
+      mode,
+      recipient: effectiveRecipient,
+      provider: mode === 'mock' ? 'mock' : 'dry_run',
+    };
+  }
 
   // 1. Try sending via custom SMTP config
   if (smtpSettingId || workspaceId) {
@@ -56,6 +98,8 @@ export async function sendEmail({
           return {
             success: false,
             error: 'Workspace scope is required for SMTP delivery',
+            mode,
+            recipient: effectiveRecipient,
           };
         }
 
@@ -91,7 +135,7 @@ export async function sendEmail({
 
         const info = await transporter.sendMail({
           from: `"${smtp.from_name}" <${smtp.user_email}>`,
-          to,
+          to: effectiveRecipient,
           subject,
           html: body.replace(/\n/g, '<br/>'),
         });
@@ -100,31 +144,37 @@ export async function sendEmail({
         return {
           success: true,
           id: info.messageId,
+          mode,
+          recipient: effectiveRecipient,
+          provider: 'smtp',
         };
       }
     } catch (err: any) {
-      console.error('[Email Service] SMTP delivery error, failing outbound:', err);
+      console.error('[Email Service] SMTP delivery error:', err?.message || 'SMTP delivery failed');
       return {
         success: false,
-        error: err?.message || 'SMTP delivery failed',
+        error: 'SMTP delivery failed',
+        mode,
+        recipient: effectiveRecipient,
       };
     }
   }
 
   // 2. Fallback to Resend if API key is provided
+  const resend = getResendClient();
   if (!resend) {
-    console.log('[Email Service] MOCK MODE ACTIVE. Email logged successfully.');
-    // Return a mock success response with a fake email ID
     return {
-      success: true,
-      id: `mock-email-${Math.random().toString(36).substring(2, 11)}`,
+      success: false,
+      error: 'No live email provider is configured',
+      mode,
+      recipient: effectiveRecipient,
     };
   }
 
   try {
     const { data, error } = await resend.emails.send({
       from,
-      to,
+      to: effectiveRecipient,
       subject,
       html: body.replace(/\n/g, '<br/>'), // simple text-to-html line breaks
     });
@@ -134,18 +184,25 @@ export async function sendEmail({
       return {
         success: false,
         error: error.message,
+        mode,
+        recipient: effectiveRecipient,
       };
     }
 
     return {
       success: true,
       id: data?.id || undefined,
+      mode,
+      recipient: effectiveRecipient,
+      provider: 'resend',
     };
   } catch (err: any) {
-    console.error('[Email Service] Unexpected error:', err);
+    console.error('[Email Service] Unexpected delivery error:', err?.message || 'Unknown delivery error');
     return {
       success: false,
-      error: err?.message || 'Unknown error occurred while sending email',
+      error: 'Unknown error occurred while sending email',
+      mode,
+      recipient: effectiveRecipient,
     };
   }
 }
