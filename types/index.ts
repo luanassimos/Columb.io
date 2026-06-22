@@ -72,7 +72,9 @@ export interface FollowupStep {
   templates?: Template;
 }
 
-export type JobStatus = 'queued' | 'sending' | 'sent' | 'failed' | 'opened' | 'replied';
+export type EmailJobSendMode = 'mock' | 'dry_run' | 'live';
+export type EmailJobProvider = 'smtp' | 'resend' | 'mock' | 'dry_run';
+export type JobStatus = 'queued' | 'processing' | 'sent' | 'failed' | 'mocked' | 'dry_run' | 'cancelled';
 
 export interface EmailJob {
   id: string;
@@ -81,6 +83,9 @@ export interface EmailJob {
   contact_id: string;
   template_id: string;
   status: JobStatus;
+  send_mode?: EmailJobSendMode | null;
+  provider?: EmailJobProvider | null;
+  provider_message_id?: string | null;
   sent_at?: string | null;
   error_message?: string | null;
   step_number: number;

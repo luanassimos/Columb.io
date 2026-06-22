@@ -29,6 +29,8 @@ export default function SendSuccessModal({ isOpen, onClose, emailSendMode = 'moc
     emailSendMode?: EmailSendMode;
     newJobsQueued?: number;
     sentCount?: number;
+    mockedCount?: number;
+    dryRunCount?: number;
     failedCount?: number;
     message?: string;
   } | null>(null);
@@ -204,8 +206,20 @@ export default function SendSuccessModal({ isOpen, onClose, emailSendMode = 'moc
                 )}
                 {result?.sentCount !== undefined && (
                   <div className="flex justify-between">
-                    <span>{isLive ? 'E-mails enviados:' : 'E-mails simulados:'}</span>
+                    <span>E-mails enviados:</span>
                     <strong className="text-emerald-600">{result.sentCount}</strong>
+                  </div>
+                )}
+                {result?.mockedCount !== undefined && (
+                  <div className="flex justify-between">
+                    <span>E-mails mockados:</span>
+                    <strong className="text-amber-600">{result.mockedCount}</strong>
+                  </div>
+                )}
+                {result?.dryRunCount !== undefined && (
+                  <div className="flex justify-between">
+                    <span>Dry runs:</span>
+                    <strong className="text-amber-600">{result.dryRunCount}</strong>
                   </div>
                 )}
                 {result?.failedCount !== undefined && result.failedCount > 0 && (

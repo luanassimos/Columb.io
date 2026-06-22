@@ -181,6 +181,10 @@ async function processQueue({
       message: 'No running campaigns to process',
       emailSendMode,
       processedCampaigns: 0,
+      sentCount: 0,
+      mockedCount: 0,
+      dryRunCount: 0,
+      failedCount: 0,
     });
   }
 
@@ -280,6 +284,7 @@ async function processQueue({
               contact_id: contact.id,
               template_id: campaign.template_id,
               status: 'queued',
+              send_mode: emailSendMode,
               step_number: 0,
             });
 
@@ -315,6 +320,8 @@ async function processQueue({
   console.log(`[Cron Job] Processing ${queuedJobs?.length || 0} queued email jobs...`);
 
   let sentCount = 0;
+  let mockedCount = 0;
+  let dryRunCount = 0;
   let failedCount = 0;
 
   for (const job of (queuedJobs || [])) {
@@ -334,6 +341,9 @@ async function processQueue({
           .from('email_jobs')
           .update({
             status: 'failed',
+            send_mode: emailSendMode,
+            provider: null,
+            provider_message_id: null,
             error_message: 'Workspace mismatch prevented dispatch',
           })
           .eq('id', job.id);
@@ -341,10 +351,13 @@ async function processQueue({
         continue;
       }
 
-      // A. Update job status to sending to lock it
+      // A. Update job status to processing to lock it
       await supabase
         .from('email_jobs')
-        .update({ status: 'sending' })
+        .update({
+          status: 'processing',
+          send_mode: emailSendMode,
+        })
         .eq('id', job.id);
 
       // B. Compile templates
@@ -366,32 +379,49 @@ async function processQueue({
 
       // D. Update job status based on result
       if (result.success) {
+        const isLiveProvider = result.provider === 'smtp' || result.provider === 'resend';
+        const finalStatus = result.mode === 'mock'
+          ? 'mocked'
+          : result.mode === 'dry_run'
+            ? 'dry_run'
+            : 'sent';
+
         await supabase
           .from('email_jobs')
           .update({
-            status: 'sent',
-            sent_at: new Date().toISOString(),
-            error_message: result.provider === 'smtp' || result.provider === 'resend'
-              ? null
-              : `${result.mode} mode: provider delivery skipped`,
+            status: finalStatus,
+            send_mode: result.mode,
+            provider: result.provider || null,
+            provider_message_id: isLiveProvider ? result.id || null : null,
+            sent_at: isLiveProvider ? new Date().toISOString() : null,
+            error_message: isLiveProvider ? null : `${result.mode} mode: provider delivery skipped`,
           })
           .eq('id', job.id);
 
-        // Update contact status to contacted
-        await supabase
-          .from('contacts')
-          .update({
-            status: 'contacted',
-            last_contact_at: new Date().toISOString(),
-          })
-          .eq('id', job.contacts.id);
+        if (isLiveProvider) {
+          // Only live provider delivery should count as a real contact.
+          await supabase
+            .from('contacts')
+            .update({
+              status: 'contacted',
+              last_contact_at: new Date().toISOString(),
+            })
+            .eq('id', job.contacts.id);
 
-        sentCount++;
+          sentCount++;
+        } else if (result.mode === 'mock') {
+          mockedCount++;
+        } else if (result.mode === 'dry_run') {
+          dryRunCount++;
+        }
       } else {
         await supabase
           .from('email_jobs')
           .update({
             status: 'failed',
+            send_mode: result.mode,
+            provider: result.provider || null,
+            provider_message_id: null,
             error_message: result.error || 'SMTP delivery failed',
           })
           .eq('id', job.id);
@@ -404,6 +434,9 @@ async function processQueue({
         .from('email_jobs')
         .update({
           status: 'failed',
+          send_mode: emailSendMode,
+          provider: null,
+          provider_message_id: null,
           error_message: jobErr?.message || 'Unexpected exception occurred during dispatch',
         })
         .eq('id', job.id);
@@ -420,6 +453,8 @@ async function processQueue({
     newJobsQueued,
     totalJobsProcessed: (queuedJobs || []).length,
     sentCount,
+    mockedCount,
+    dryRunCount,
     failedCount,
   });
 }
