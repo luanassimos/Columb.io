@@ -4,7 +4,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://localhost:54321';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-anon-key';
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
     request,
   });
