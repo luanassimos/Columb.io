@@ -9,6 +9,7 @@ import {
   Users,
   Mail,
   Send,
+  Inbox,
   Bell,
   Settings,
   LogOut,
@@ -30,6 +31,7 @@ export default function Sidebar({ profileName, userEmail }: SidebarProps) {
     { label: 'Leads', icon: Users, href: '/contacts' },
     { label: 'Templates', icon: Mail, href: '/templates' },
     { label: 'Campaigns', icon: Send, href: '/campaigns' },
+    { label: 'Inbox', icon: Inbox, href: '/inbox' },
   ];
 
   const bottomNavItems = [

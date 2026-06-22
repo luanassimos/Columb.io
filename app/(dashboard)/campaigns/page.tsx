@@ -14,6 +14,7 @@ export default async function CampaignsPage() {
         templates={[]}
         availableTags={[]}
         smtpSettingsList={[]}
+        emailJobs={[]}
         role="viewer"
       />
     );
