@@ -108,20 +108,24 @@ export async function updateCampaign(input: UpdateCampaignInput) {
     return { error: 'You do not have permission to update campaigns' };
   }
 
+  const { data: existingCampaign, error: existingError } = await supabase
+    .from('campaigns')
+    .select('id, status')
+    .eq('id', input.id)
+    .eq('workspace_id', workspaceId)
+    .maybeSingle();
+
+  if (existingError || !existingCampaign) {
+    return { error: 'Campaign not found in active workspace' };
+  }
+
+  if (existingCampaign.status === 'completed') {
+    return { error: 'Completed campaigns cannot be edited' };
+  }
+
   if (!canManageCampaigns(context.role)) {
     if (input.status !== 'draft') {
       return { error: 'You do not have permission to activate campaigns' };
-    }
-
-    const { data: existingCampaign, error: existingError } = await supabase
-      .from('campaigns')
-      .select('id, status')
-      .eq('id', input.id)
-      .eq('workspace_id', workspaceId)
-      .maybeSingle();
-
-    if (existingError || !existingCampaign) {
-      return { error: 'Campaign not found in active workspace' };
     }
 
     if (existingCampaign.status !== 'draft') {

@@ -281,8 +281,10 @@ export default function CampaignsClient({
     </button>
   );
 
-  const canEditCampaign = (campaign: Campaign) =>
-    canManageCampaignStatuses || (role === 'member' && campaign.status === 'draft');
+  const canEditCampaign = (campaign: Campaign) => {
+    if (campaign.status === 'completed') return false;
+    return canManageCampaignStatuses || (role === 'member' && campaign.status === 'draft');
+  };
 
   return (
     <div className="space-y-6">

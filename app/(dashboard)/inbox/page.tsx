@@ -49,7 +49,7 @@ export default async function InboxPage({ searchParams }: InboxPageProps) {
     // 3. Fetch sent email jobs (status in 'sent', 'replied')
     const { data: emailJobsData } = await supabase
       .from('email_jobs')
-      .select('*, campaign(*), templates(*), contacts(*)')
+      .select('*, campaigns(*), templates(*), contacts(*)')
       .eq('workspace_id', workspaceId)
       .in('status', ['sent', 'replied'])
       .order('sent_at', { ascending: false, nullsFirst: false });

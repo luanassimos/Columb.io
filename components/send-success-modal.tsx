@@ -229,61 +229,7 @@ export default function SendSuccessModal({ isOpen, onClose, emailSendMode = 'moc
           </div>
         </div>
 
-        {/* Message and Status */}
-        <div className="space-y-2 min-h-[120px] flex flex-col justify-center items-center">
-          {status === 'success' ? (
-            <div className="animate-loading-delay space-y-3 w-full">
-              <h3 className="text-xl font-bold text-[#002B6A]">Disparo Concluído!</h3>
-              
-              <div className="text-xs text-[#475569] space-y-1.5 bg-slate-50 border border-slate-100 p-4 rounded-2xl text-left max-w-sm mx-auto shadow-sm">
-                {result?.newJobsQueued !== undefined && (
-                  <div className="flex justify-between">
-                    <span>E-mails enfileirados:</span>
-                    <strong className="text-[#002B6A]">{result.newJobsQueued}</strong>
-                  </div>
-                )}
-                {result?.sentCount !== undefined && (
-                  <div className="flex justify-between">
-                    <span>E-mails enviados:</span>
-                    <strong className="text-emerald-600">{result.sentCount}</strong>
-                  </div>
-                )}
-                {result?.failedCount !== undefined && result.failedCount > 0 && (
-                  <div className="flex justify-between border-t border-slate-100 pt-1.5 text-rose-500">
-                    <span>Falhas no envio:</span>
-                    <strong>{result.failedCount}</strong>
-                  </div>
-                )}
-                {result?.message && (
-                  <p className="text-[11px] italic text-[#475569]/80 border-t border-slate-100 pt-1.5 text-center mt-1">
-                    {result.message}
-                  </p>
-                )}
-              </div>
-            </div>
-          ) : status === 'error' ? (
-            <div className="animate-loading-delay w-full">
-              <h3 className="text-xl font-bold text-[#002B6A]">Erro no Processamento</h3>
-              <p className="text-xs text-[#475569] mt-1">
-                Não foi possível executar a campanha ou processar a fila.
-              </p>
-              <div className="text-xs text-rose-600 bg-rose-50 border border-rose-100 p-3.5 rounded-2xl mt-3 max-w-sm mx-auto leading-normal text-left font-medium">
-                <strong>Detalhes do erro:</strong><br />
-                {errorMessage}
-              </div>
-            </div>
-          ) : (
-            <div>
-              <h3 className="text-lg font-bold text-[#002B6A] flex items-center justify-center gap-2">
-                <Send className="h-4.5 w-4.5 text-[#2D6BFF] animate-pulse" />
-                <span>Processando campanhas...</span>
-              </h3>
-              <p className="text-xs text-[#475569] mt-1.5 leading-normal max-w-xs mx-auto">
-                Buscando campanhas ativas, gerando destinatários e transmitindo via SMTP.
-              </p>
-            </div>
-          )}
-        </div>
+
 
         {/* Bottom Actions */}
         <div className="mt-6">

@@ -93,6 +93,7 @@ export interface EmailJob {
   template?: Template;
   templates?: Template;
   campaign?: Campaign;
+  campaigns?: Campaign;
 }
 
 export type NotificationType = 'email_replied' | 'campaign_finished' | 'followup_pending' | 'delivery_failed';

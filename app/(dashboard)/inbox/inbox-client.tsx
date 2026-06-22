@@ -137,12 +137,13 @@ export default function InboxClient({
   // Filter & Search Sent Jobs
 
   const filteredSentJobs = emailJobs.filter(job => {
+    const contact = job.contacts || job.contact;
     if (!search) return true;
     const q = search.toLowerCase();
     return (
-      (job.contacts?.name || '').toLowerCase().includes(q) ||
-      (job.contacts?.email || '').toLowerCase().includes(q) ||
-      (job.contacts?.company || '').toLowerCase().includes(q) ||
+      (contact?.name || '').toLowerCase().includes(q) ||
+      (contact?.email || '').toLowerCase().includes(q) ||
+      (contact?.company || '').toLowerCase().includes(q) ||
       (job.templates?.subject || '').toLowerCase().includes(q) ||
       (job.templates?.body || '').toLowerCase().includes(q)
     );
@@ -421,9 +422,11 @@ export default function InboxClient({
               ) : (
                 filteredSentJobs.map(job => {
                   const isSelected = job.id === selectedId;
-                  const contactName = job.contacts?.name || 'Lead Misterioso';
-                  const subjectPreview = job.templates?.subject || 'Sem Assunto (Modelo Excluído)';
-                  const bodyPreview = job.templates?.body || '';
+                  const contact = job.contacts || job.contact;
+                  const contactName = contact?.name || 'Lead Misterioso';
+                  const templateObj = job.templates || job.template;
+                  const subjectPreview = templateObj?.subject || 'Sem Assunto (Modelo Excluído)';
+                  const bodyPreview = templateObj?.body || '';
                   return (
                     <div
                       key={job.id}
@@ -472,23 +475,33 @@ export default function InboxClient({
               <div className="px-6 py-4 bg-white border-b border-[#D8E0EA] flex items-center justify-between gap-4 shrink-0 shadow-sm z-10">
                 {/* Contact and Status Info */}
                 <div className="flex items-center gap-3">
-                  <div className={`h-11 w-11 rounded-full flex items-center justify-center text-sm font-bold ${getAvatarColor(selectedReply?.contactName || selectedSentJob?.contacts?.name || 'Lead')}`}>
-                    {getInitials(selectedReply?.contactName || selectedSentJob?.contacts?.name || 'Lead')}
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold text-[#002B6A] flex items-center gap-2">
-                      <span>{selectedReply?.contactName || selectedSentJob?.contacts?.name}</span>
-                      {(selectedReply?.contactCompany || selectedSentJob?.contacts?.company) && (
-                        <span className="text-xs font-normal text-[#475569] flex items-center gap-1">
-                          <Building className="h-3 w-3" />
-                          {selectedReply?.contactCompany || selectedSentJob?.contacts?.company}
-                        </span>
-                      )}
-                    </h3>
-                    <p className="text-xs text-[#475569]/80 mt-0.5">
-                      {selectedReply?.contactEmail || selectedSentJob?.contacts?.email}
-                    </p>
-                  </div>
+                  {(() => {
+                    const contact = selectedSentJob?.contacts || selectedSentJob?.contact;
+                    const contactName = selectedReply?.contactName || contact?.name || 'Lead';
+                    const contactCompany = selectedReply?.contactCompany || contact?.company;
+                    const contactEmail = selectedReply?.contactEmail || contact?.email;
+                    return (
+                      <>
+                        <div className={`h-11 w-11 rounded-full flex items-center justify-center text-sm font-bold ${getAvatarColor(contactName)}`}>
+                          {getInitials(contactName)}
+                        </div>
+                        <div>
+                          <h3 className="text-sm font-bold text-[#002B6A] flex items-center gap-2">
+                            <span>{contactName}</span>
+                            {contactCompany && (
+                              <span className="text-xs font-normal text-[#475569] flex items-center gap-1">
+                                <Building className="h-3 w-3" />
+                                {contactCompany}
+                              </span>
+                            )}
+                          </h3>
+                          <p className="text-xs text-[#475569]/80 mt-0.5">
+                            {contactEmail}
+                          </p>
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
 
                 {/* Actions */}
@@ -644,10 +657,11 @@ export default function InboxClient({
               ) : (
                 (() => {
                   let compiled = { subject: 'Sem Assunto', body: '' };
-                  if (selectedSentJob && selectedSentJob.contacts) {
+                  const contact = selectedSentJob?.contacts || selectedSentJob?.contact;
+                  if (selectedSentJob && contact) {
                     const subjectTmpl = selectedSentJob.templates?.subject || 'Sem Assunto';
                     const bodyTmpl = selectedSentJob.templates?.body || '[Modelo de e-mail excluído]';
-                    compiled = compileEmail(subjectTmpl, bodyTmpl, selectedSentJob.contacts);
+                    compiled = compileEmail(subjectTmpl, bodyTmpl, contact);
                   }
                   return (
                     <div className="flex-1 overflow-y-auto p-6 space-y-6 min-h-0 bg-slate-50/50">
@@ -658,14 +672,14 @@ export default function InboxClient({
                               <User className="h-3.5 w-3.5 text-emerald-500" />
                               <span>Você</span>
                               <ArrowUpRight className="h-3 w-3 text-emerald-500" />
-                              <span className="font-normal text-[#475569]/70">para {selectedSentJob?.contacts?.name} &lt;{selectedSentJob?.contacts?.email}&gt;</span>
+                              <span className="font-normal text-[#475569]/70">para {contact?.name} &lt;{contact?.email}&gt;</span>
                             </div>
                             <h4 className="text-xs font-bold text-[#002B6A] mt-1">
                               Assunto: {compiled.subject}
                             </h4>
                           </div>
                           <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-500/10">
-                            Enviado via {selectedSentJob?.campaign?.dispatch_type === 'immediate' ? 'Disparo Imediato' : 'Agendamento'}
+                            Enviado via {(selectedSentJob?.campaigns || selectedSentJob?.campaign)?.dispatch_type === 'immediate' ? 'Disparo Imediato' : 'Agendamento'}
                           </span>
                         </div>
                         <hr className="border-[#D8E0EA]/50" />
