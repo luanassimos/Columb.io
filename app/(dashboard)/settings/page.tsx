@@ -3,6 +3,8 @@ import { createServerClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import SettingsClient from './settings-client';
+import { assertPermission, canManageSmtp } from '@/lib/permissions';
+import { getActiveWorkspaceContext } from '@/lib/workspace';
 
 export default async function SettingsPage() {
   const supabase = await createServerClient();
@@ -26,30 +28,39 @@ export default async function SettingsPage() {
     console.log('Exception fetching profile in settings:', err);
   }
 
-  // Fetch workspaces
-  let workspaces: any[] = [];
-  try {
-    const { data, error } = await supabase
-      .from('workspaces')
-      .select('*')
-      .order('created_at', { ascending: true });
-    if (error) {
-      console.error('Error fetching workspaces in settings:', error.message || error);
-    } else {
-      workspaces = data || [];
-    }
-  } catch (err) {
-    console.error('Exception fetching workspaces in settings:', err);
+  const context = await getActiveWorkspaceContext();
+  if ('error' in context) {
+    if (context.error === 'Unauthorized') redirect('/login');
   }
 
-  const activeWorkspace = (profile && workspaces?.find(w => w.id === profile.workspace_id)) || {
+  // Fetch workspaces through membership so settings never lists unrelated rows.
+  let workspaces: any[] = [];
+  if (!('error' in context)) {
+    try {
+      const { data, error } = await supabase
+        .from('workspace_members')
+        .select('workspaces(*)')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: true });
+      if (error) {
+        console.error('Error fetching workspaces in settings:', error.message || error);
+      } else {
+        workspaces = (data || []).map((row: any) => row.workspaces).filter(Boolean);
+      }
+    } catch (err) {
+      console.error('Exception fetching workspaces in settings:', err);
+    }
+  }
+
+  const activeWorkspace = (!('error' in context) && workspaces?.find(w => w.id === context.workspaceId)) || (profile && workspaces?.find(w => w.id === profile.workspace_id)) || {
     id: 'default-workspace-id',
     name: 'Default Workspace',
   };
+  const activeRole = !('error' in context) ? context.role : 'viewer';
 
   // Fetch all SMTP Settings for this workspace
   let smtpSettingsList: any[] = [];
-  if (activeWorkspace.id !== 'default-workspace-id') {
+  if (activeWorkspace.id !== 'default-workspace-id' && canManageSmtp(activeRole)) {
     try {
       const { data, error } = await supabase
         .from('smtp_settings')
@@ -74,14 +85,12 @@ export default async function SettingsPage() {
     const { data: { user } } = await serverSupabase.auth.getUser();
     if (!user) return;
 
-    const { data: member } = await serverSupabase
-      .from('workspace_members')
-      .select('workspace_id')
-      .eq('workspace_id', activeWorkspace.id)
-      .eq('user_id', user.id)
-      .maybeSingle();
+    const activeContext = await getActiveWorkspaceContext();
+    if ('error' in activeContext) return;
 
-    if (!member) return;
+    if (activeContext.workspaceId !== activeWorkspace.id) return;
+    const permissionError = assertPermission(activeContext.role, 'manageWorkspace');
+    if (permissionError) return;
 
     await serverSupabase
       .from('workspaces')
@@ -105,6 +114,7 @@ export default async function SettingsPage() {
         activeWorkspace={activeWorkspace}
         smtpSettingsList={smtpSettingsList}
         updateWorkspaceSettings={updateWorkspaceSettings}
+        role={activeRole}
       />
     </div>
   );

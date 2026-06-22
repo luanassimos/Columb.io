@@ -14,11 +14,12 @@ export default async function CampaignsPage() {
         templates={[]}
         availableTags={[]}
         smtpSettingsList={[]}
+        role="viewer"
       />
     );
   }
 
-  const { supabase, workspaceId } = context;
+  const { supabase, workspaceId, role } = context;
 
   // Fetch campaigns and templates for active workspace
   let campaigns: Campaign[] = [];
@@ -56,13 +57,12 @@ export default async function CampaignsPage() {
       availableTags = Array.from(new Set(allTags)).sort();
     }
 
-    // Fetch workspace SMTP settings list
+    // Fetch sanitized sender options; SMTP passwords remain admin-only in RLS.
     const { data: smtpData } = await supabase
-      .from('smtp_settings')
-      .select('*')
-      .eq('workspace_id', workspaceId)
-      .order('created_at', { ascending: true });
-    smtpSettingsList = smtpData || [];
+      .rpc('get_smtp_sender_options', { target_workspace_id: workspaceId });
+    smtpSettingsList = ((smtpData || []) as SmtpSettings[]).sort((a, b) =>
+      (a.created_at || '').localeCompare(b.created_at || '')
+    );
   } catch {}
 
   return (
@@ -71,6 +71,7 @@ export default async function CampaignsPage() {
       templates={templates}
       availableTags={availableTags}
       smtpSettingsList={smtpSettingsList}
+      role={role}
     />
   );
 }

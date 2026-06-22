@@ -6,6 +6,7 @@ import TemplateModal from '@/components/template-modal';
 import { deleteTemplate } from '@/app/actions/template';
 import { useRouter } from 'next/navigation';
 import { Plus, Mail, Edit2, Trash2, Loader2, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
+import { hasPermission, WorkspaceRole } from '@/lib/permissions';
 
 type SortKey = 'name' | 'subject' | 'created_at';
 type SortDir = 'asc' | 'desc';
@@ -17,10 +18,13 @@ function formatDate(iso?: string | null) {
 
 interface TemplatesClientProps {
   templates: Template[];
+  role: WorkspaceRole;
 }
 
-export default function TemplatesClient({ templates }: TemplatesClientProps) {
+export default function TemplatesClient({ templates, role }: TemplatesClientProps) {
   const router = useRouter();
+  const canEditTemplates = hasPermission(role, 'manageTemplates');
+  const canDeleteTemplates = hasPermission(role, 'deleteTemplates');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [templateToEdit, setTemplateToEdit] = useState<Template | null>(null);
 
@@ -86,17 +90,19 @@ export default function TemplatesClient({ templates }: TemplatesClientProps) {
             Create reusable email copy templates with dynamic variables.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            setTemplateToEdit(null);
-            setIsModalOpen(true);
-          }}
-          className="flex items-center gap-2 px-4 py-2 bg-[#2D6BFF] hover:bg-[#1b58ec] text-white rounded-lg text-sm font-semibold transition-all shadow-sm shadow-[#2D6BFF]/30"
-        >
-          <Plus className="h-4 w-4" />
-          Create Template
-        </button>
+        {canEditTemplates && (
+          <button
+            type="button"
+            onClick={() => {
+              setTemplateToEdit(null);
+              setIsModalOpen(true);
+            }}
+            className="flex items-center gap-2 px-4 py-2 bg-[#2D6BFF] hover:bg-[#1b58ec] text-white rounded-lg text-sm font-semibold transition-all shadow-sm shadow-[#2D6BFF]/30"
+          >
+            <Plus className="h-4 w-4" />
+            Create Template
+          </button>
+        )}
       </div>
 
       {templates.length === 0 ? (
@@ -111,15 +117,17 @@ export default function TemplatesClient({ templates }: TemplatesClientProps) {
               Your template list is empty. Click <strong>Create Template</strong> to build your first email template.
             </p>
           </div>
-          <button
-            onClick={() => {
-              setTemplateToEdit(null);
-              setIsModalOpen(true);
-            }}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-[#2D6BFF] hover:bg-[#1b58ec] text-white rounded-lg text-sm font-semibold transition-all"
-          >
-            <Plus className="h-4 w-4" /> Create First Template
-          </button>
+          {canEditTemplates && (
+            <button
+              onClick={() => {
+                setTemplateToEdit(null);
+                setIsModalOpen(true);
+              }}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-[#2D6BFF] hover:bg-[#1b58ec] text-white rounded-lg text-sm font-semibold transition-all"
+            >
+              <Plus className="h-4 w-4" /> Create First Template
+            </button>
+          )}
         </div>
       ) : (
         /* Table */
@@ -143,13 +151,15 @@ export default function TemplatesClient({ templates }: TemplatesClientProps) {
                   <th className="px-4 py-3 text-left w-1/3"><ThBtn col="subject" label="Subject" /></th>
                   <th className="px-4 py-3 text-left">Body Preview</th>
                   <th className="px-4 py-3 text-left w-40"><ThBtn col="created_at" label="Created At" /></th>
-                  <th className="px-4 py-3 text-right w-28 text-xs font-semibold text-[#475569] uppercase tracking-wide">Actions</th>
+                  {(canEditTemplates || canDeleteTemplates) && (
+                    <th className="px-4 py-3 text-right w-28 text-xs font-semibold text-[#475569] uppercase tracking-wide">Actions</th>
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#D8E0EA]">
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-4 py-12 text-center text-sm text-[#475569]">
+                    <td colSpan={canEditTemplates || canDeleteTemplates ? 5 : 4} className="px-4 py-12 text-center text-sm text-[#475569]">
                       No templates match your search.
                     </td>
                   </tr>
@@ -173,29 +183,35 @@ export default function TemplatesClient({ templates }: TemplatesClientProps) {
                         {formatDate(t.created_at)}
                       </td>
                       {/* Actions */}
-                      <td className="px-4 py-3 text-right whitespace-nowrap">
-                        <div className="flex justify-end items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setTemplateToEdit(t);
-                              setIsModalOpen(true);
-                            }}
-                            className="p-1 text-slate-400 hover:text-[#2D6BFF] hover:bg-[#EAF2FF] rounded transition-all"
-                            title="Edit Template"
-                          >
-                            <Edit2 className="h-4 w-4" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setTemplateToDelete(t)}
-                            className="p-1 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded transition-all"
-                            title="Delete Template"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </td>
+                      {(canEditTemplates || canDeleteTemplates) && (
+                        <td className="px-4 py-3 text-right whitespace-nowrap">
+                          <div className="flex justify-end items-center gap-2">
+                            {canEditTemplates && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setTemplateToEdit(t);
+                                  setIsModalOpen(true);
+                                }}
+                                className="p-1 text-slate-400 hover:text-[#2D6BFF] hover:bg-[#EAF2FF] rounded transition-all"
+                                title="Edit Template"
+                              >
+                                <Edit2 className="h-4 w-4" />
+                              </button>
+                            )}
+                            {canDeleteTemplates && (
+                              <button
+                                type="button"
+                                onClick={() => setTemplateToDelete(t)}
+                                className="p-1 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded transition-all"
+                                title="Delete Template"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   ))
                 )}
@@ -211,14 +227,16 @@ export default function TemplatesClient({ templates }: TemplatesClientProps) {
       )}
 
       {/* Slide-in Modal */}
-      <TemplateModal
-        isOpen={isModalOpen}
-        onClose={() => {
-          setIsModalOpen(false);
-          setTemplateToEdit(null);
-        }}
-        templateToEdit={templateToEdit}
-      />
+      {canEditTemplates && (
+        <TemplateModal
+          isOpen={isModalOpen}
+          onClose={() => {
+            setIsModalOpen(false);
+            setTemplateToEdit(null);
+          }}
+          templateToEdit={templateToEdit}
+        />
+      )}
 
       {/* Delete Confirmation Modal */}
       {templateToDelete && (

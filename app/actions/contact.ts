@@ -2,6 +2,7 @@
 
 import { createServerClient } from '@/lib/supabase/server';
 import { getActiveWorkspaceContext } from '@/lib/workspace';
+import { assertPermission } from '@/lib/permissions';
 import { revalidatePath } from 'next/cache';
 import { ContactStatus } from '@/types';
 
@@ -89,7 +90,7 @@ export async function createContact(input: CreateContactInput) {
       // 3. Register membership
       const { error: memError } = await supabase
         .from('workspace_members')
-        .insert({ workspace_id: workspaceId, user_id: user.id });
+        .insert({ workspace_id: workspaceId, user_id: user.id, role: 'owner' });
 
       if (memError) {
         console.error('Error creating workspace membership:', memError);
@@ -112,10 +113,16 @@ export async function createContact(input: CreateContactInput) {
     }
   }
 
-  const { data: contact, error } = await supabase
+  const context = await getActiveWorkspaceContext();
+  if ('error' in context) return { error: context.error };
+  const permissionError = assertPermission(context.role, 'manageContacts');
+  if (permissionError) return permissionError;
+  const { supabase: activeSupabase, workspaceId: activeWorkspaceId } = context;
+
+  const { data: contact, error } = await activeSupabase
     .from('contacts')
     .insert({
-      workspace_id: workspaceId,
+      workspace_id: activeWorkspaceId,
       name: input.name.trim(),
       company: input.company.trim(),
       email: input.email.trim().toLowerCase(),
@@ -153,6 +160,8 @@ export interface UpdateContactInput {
 export async function updateContact(input: UpdateContactInput) {
   const context = await getActiveWorkspaceContext();
   if ('error' in context) return { error: context.error };
+  const permissionError = assertPermission(context.role, 'manageContacts');
+  if (permissionError) return permissionError;
   const { supabase, workspaceId } = context;
 
   const { error } = await supabase
@@ -182,6 +191,8 @@ export async function updateContact(input: UpdateContactInput) {
 export async function deleteContact(id: string) {
   const context = await getActiveWorkspaceContext();
   if ('error' in context) return { error: context.error };
+  const permissionError = assertPermission(context.role, 'deleteContacts');
+  if (permissionError) return permissionError;
   const { supabase, workspaceId } = context;
 
   const { error } = await supabase

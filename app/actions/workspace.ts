@@ -65,7 +65,7 @@ export async function createWorkspace(name: string, timezone: string = 'America/
   // 2. Register membership so the user can see this workspace
   const { error: memberError } = await supabase
     .from('workspace_members')
-    .insert({ workspace_id: workspace.id, user_id: user.id });
+    .insert({ workspace_id: workspace.id, user_id: user.id, role: 'owner' });
 
   if (memberError) {
     console.error('Error inserting workspace membership:', memberError);

@@ -6,6 +6,7 @@ import NotificationCenter from '@/components/notification-center';
 import Sidebar from '@/components/sidebar';
 import { User } from 'lucide-react';
 import HeaderTestButton from '@/components/header-test-button';
+import { WorkspaceRole } from '@/lib/permissions';
 
 export default async function DashboardLayout({
   children,
@@ -46,11 +47,12 @@ export default async function DashboardLayout({
   }
 
   // 3. Get all workspaces the user is a member of (via workspace_members join)
+  let workspaceMemberships: Array<{ role: WorkspaceRole; workspaces: any }> = [];
   let workspacesList: any[] = [];
   try {
     const { data: wData, error: wError } = await supabase
       .from('workspace_members')
-      .select('workspaces(id, name, created_at)')
+      .select('role, workspaces(id, name, created_at)')
       .eq('user_id', user.id)
       .order('created_at', { ascending: true });
 
@@ -58,8 +60,9 @@ export default async function DashboardLayout({
       console.error('Error fetching workspaces in layout:', wError.message || wError);
     } else {
       // Unwrap the nested join result: [{workspaces: {id, name, created_at}}, ...]
-      workspacesList = (wData || [])
-        .map((row: any) => row.workspaces)
+      workspaceMemberships = (wData || []) as Array<{ role: WorkspaceRole; workspaces: any }>;
+      workspacesList = workspaceMemberships
+        .map((row) => row.workspaces)
         .filter(Boolean);
     }
   } catch (err) {
@@ -68,6 +71,9 @@ export default async function DashboardLayout({
 
   // Fallback workspace handling
   const activeWorkspace = profile ? workspacesList.find((w) => w.id === profile.workspace_id) : null;
+  const activeWorkspaceRole = profile
+    ? workspaceMemberships.find((row) => row.workspaces?.id === profile.workspace_id)?.role || 'viewer'
+    : 'viewer';
   const displayedWorkspace = activeWorkspace || {
     id: 'default-workspace-id',
     name: 'Default Workspace',
@@ -114,6 +120,7 @@ export default async function DashboardLayout({
               workspaces={workspacesList}
               activeWorkspaceId={displayedWorkspace.id}
               activeWorkspaceName={displayedWorkspace.name}
+              activeWorkspaceRole={activeWorkspaceRole}
             />
             <HeaderTestButton />
           </div>
@@ -124,6 +131,7 @@ export default async function DashboardLayout({
             <NotificationCenter
               notifications={notificationsList}
               workspaceId={displayedWorkspace.id}
+              role={activeWorkspaceRole}
             />
 
             {/* Profile menu */}

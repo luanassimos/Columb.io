@@ -8,10 +8,10 @@ export default async function ContactsPage() {
   const context = await getActiveWorkspaceContext();
   if ('error' in context) {
     if (context.error === 'Unauthorized') redirect('/login');
-    return <ContactsClient contacts={[]} />;
+    return <ContactsClient contacts={[]} role="viewer" />;
   }
 
-  const { supabase, workspaceId } = context;
+  const { supabase, workspaceId, role } = context;
 
   // Fetch contacts for the active workspace
   let contacts: Contact[] = [];
@@ -25,5 +25,5 @@ export default async function ContactsPage() {
     if (!error) contacts = data || [];
   } catch {}
 
-  return <ContactsClient contacts={contacts} />;
+  return <ContactsClient contacts={contacts} role={role} />;
 }

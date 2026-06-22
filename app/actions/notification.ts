@@ -1,11 +1,14 @@
 'use server';
 
 import { getActiveWorkspaceContext } from '@/lib/workspace';
+import { assertPermission } from '@/lib/permissions';
 import { revalidatePath } from 'next/cache';
 
 export async function markNotificationRead(notificationId: string) {
   const context = await getActiveWorkspaceContext();
   if ('error' in context) return { error: context.error };
+  const permissionError = assertPermission(context.role, 'manageWorkspace');
+  if (permissionError) return permissionError;
   const { supabase, workspaceId } = context;
 
   const { error } = await supabase
@@ -26,6 +29,8 @@ export async function markNotificationRead(notificationId: string) {
 export async function markAllNotificationsRead(workspaceId: string) {
   const context = await getActiveWorkspaceContext();
   if ('error' in context) return { error: context.error };
+  const permissionError = assertPermission(context.role, 'manageWorkspace');
+  if (permissionError) return permissionError;
   const { supabase, workspaceId: activeWorkspaceId } = context;
 
   if (workspaceId !== activeWorkspaceId) {

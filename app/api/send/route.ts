@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { compileEmail } from '@/services/email-compiler';
 import { sendEmail } from '@/services/resend';
+import { canSendCampaigns, WorkspaceRole } from '@/lib/permissions';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -28,7 +29,7 @@ export async function POST(request: Request) {
 
 type ExecutionContext =
   | { type: 'cron'; workspaceId?: string }
-  | { type: 'user'; userId: string; workspaceId: string };
+  | { type: 'user'; userId: string; workspaceId: string; role: WorkspaceRole };
 
 type AuthResult = ExecutionContext | { response: Response };
 
@@ -101,10 +102,26 @@ async function getExecutionContext(
       return { response: jsonError('You do not have permission to process this workspace', 403) };
     }
 
+    const { data: membership, error: membershipError } = await supabase
+      .from('workspace_members')
+      .select('role')
+      .eq('workspace_id', profile.workspace_id)
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (membershipError || !membership?.role) {
+      return { response: jsonError('You do not have access to the active workspace', 403) };
+    }
+
+    if (!canSendCampaigns(membership.role as WorkspaceRole)) {
+      return { response: jsonError('You do not have permission to send campaigns', 403) };
+    }
+
     return {
       type: 'user',
       userId: user.id,
       workspaceId: profile.workspace_id,
+      role: membership.role as WorkspaceRole,
     };
   } catch (err) {
     console.error('[Send Auth] Error verifying session:', err);

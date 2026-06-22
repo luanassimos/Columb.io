@@ -6,6 +6,7 @@ import AddLeadModal from '@/components/add-lead-modal';
 import { Plus, Upload, Users, ExternalLink, ChevronUp, ChevronDown, ChevronsUpDown, Edit2, Trash2, Loader2 } from 'lucide-react';
 import { deleteContact } from '@/app/actions/contact';
 import { useRouter } from 'next/navigation';
+import { hasPermission, WorkspaceRole } from '@/lib/permissions';
 
 // lucide-react@1.18 removed the LinkedIn icon — using an inline SVG instead
 const LinkedinIcon = ({ className }: { className?: string }) => (
@@ -35,10 +36,13 @@ function formatDate(iso?: string | null) {
 
 interface ContactsClientProps {
   contacts: Contact[];
+  role: WorkspaceRole;
 }
 
-export default function ContactsClient({ contacts }: ContactsClientProps) {
+export default function ContactsClient({ contacts, role }: ContactsClientProps) {
   const router = useRouter();
+  const canEditContacts = hasPermission(role, 'manageContacts');
+  const canDeleteContacts = hasPermission(role, 'deleteContacts');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [contactToEdit, setContactToEdit] = useState<Contact | null>(null);
   
@@ -118,17 +122,19 @@ export default function ContactsClient({ contacts }: ContactsClientProps) {
             <Upload className="h-4 w-4" />
             CSV Import
           </button>
-          <button
-            type="button"
-            onClick={() => {
-              setContactToEdit(null);
-              setIsModalOpen(true);
-            }}
-            className="flex items-center gap-2 px-4 py-2 bg-[#2D6BFF] hover:bg-[#1b58ec] text-white rounded-lg text-sm font-semibold transition-all shadow-sm shadow-[#2D6BFF]/30"
-          >
-            <Plus className="h-4 w-4" />
-            Add Lead
-          </button>
+          {canEditContacts && (
+            <button
+              type="button"
+              onClick={() => {
+                setContactToEdit(null);
+                setIsModalOpen(true);
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-[#2D6BFF] hover:bg-[#1b58ec] text-white rounded-lg text-sm font-semibold transition-all shadow-sm shadow-[#2D6BFF]/30"
+            >
+              <Plus className="h-4 w-4" />
+              Add Lead
+            </button>
+          )}
         </div>
       </div>
 
@@ -160,12 +166,14 @@ export default function ContactsClient({ contacts }: ContactsClientProps) {
               Click <strong>Add Lead</strong> to create your first lead manually.
             </p>
           </div>
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-[#2D6BFF] hover:bg-[#1b58ec] text-white rounded-lg text-sm font-semibold transition-all"
-          >
-            <Plus className="h-4 w-4" /> Add First Lead
-          </button>
+          {canEditContacts && (
+            <button
+              onClick={() => setIsModalOpen(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-[#2D6BFF] hover:bg-[#1b58ec] text-white rounded-lg text-sm font-semibold transition-all"
+            >
+              <Plus className="h-4 w-4" /> Add First Lead
+            </button>
+          )}
         </div>
       ) : (
         /* Table */
@@ -194,13 +202,15 @@ export default function ContactsClient({ contacts }: ContactsClientProps) {
                   <th className="px-4 py-3 text-left text-xs font-semibold text-[#475569] uppercase tracking-wide">Tags</th>
                   <th className="px-4 py-3 text-left"><ThBtn col="status" label="Status" /></th>
                   <th className="px-4 py-3 text-left"><ThBtn col="imported_at" label="Imported At" /></th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-[#475569] uppercase tracking-wide">Actions</th>
+                  {(canEditContacts || canDeleteContacts) && (
+                    <th className="px-4 py-3 text-right text-xs font-semibold text-[#475569] uppercase tracking-wide">Actions</th>
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#D8E0EA]">
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="px-4 py-12 text-center text-sm text-[#475569]">
+                    <td colSpan={canEditContacts || canDeleteContacts ? 10 : 9} className="px-4 py-12 text-center text-sm text-[#475569]">
                       No leads match your search.
                     </td>
                   </tr>
@@ -267,29 +277,35 @@ export default function ContactsClient({ contacts }: ContactsClientProps) {
                         {formatDate(c.imported_at)}
                       </td>
                       {/* Actions */}
-                      <td className="px-4 py-3 text-right whitespace-nowrap">
-                        <div className="flex justify-end items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setContactToEdit(c);
-                              setIsModalOpen(true);
-                            }}
-                            className="p-1 text-slate-400 hover:text-[#2D6BFF] hover:bg-[#EAF2FF] rounded transition-all"
-                            title="Edit Lead"
-                          >
-                            <Edit2 className="h-4 w-4" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setLeadToDelete(c)}
-                            className="p-1 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded transition-all"
-                            title="Delete Lead"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </td>
+                      {(canEditContacts || canDeleteContacts) && (
+                        <td className="px-4 py-3 text-right whitespace-nowrap">
+                          <div className="flex justify-end items-center gap-2">
+                            {canEditContacts && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setContactToEdit(c);
+                                  setIsModalOpen(true);
+                                }}
+                                className="p-1 text-slate-400 hover:text-[#2D6BFF] hover:bg-[#EAF2FF] rounded transition-all"
+                                title="Edit Lead"
+                              >
+                                <Edit2 className="h-4 w-4" />
+                              </button>
+                            )}
+                            {canDeleteContacts && (
+                              <button
+                                type="button"
+                                onClick={() => setLeadToDelete(c)}
+                                className="p-1 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded transition-all"
+                                title="Delete Lead"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   ))
                 )}
@@ -304,14 +320,16 @@ export default function ContactsClient({ contacts }: ContactsClientProps) {
         </div>
       )}
 
-      <AddLeadModal
-        isOpen={isModalOpen}
-        onClose={() => {
-          setIsModalOpen(false);
-          setContactToEdit(null);
-        }}
-        contactToEdit={contactToEdit}
-      />
+      {canEditContacts && (
+        <AddLeadModal
+          isOpen={isModalOpen}
+          onClose={() => {
+            setIsModalOpen(false);
+            setContactToEdit(null);
+          }}
+          contactToEdit={contactToEdit}
+        />
+      )}
 
       {/* Delete Confirmation Modal */}
       {leadToDelete && (

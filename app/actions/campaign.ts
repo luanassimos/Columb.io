@@ -1,6 +1,7 @@
 'use server';
 
 import { getActiveWorkspaceContext } from '@/lib/workspace';
+import { assertPermission, canManageCampaigns } from '@/lib/permissions';
 import { revalidatePath } from 'next/cache';
 import { CampaignStatus } from '@/types';
 
@@ -60,6 +61,12 @@ async function validateCampaignReferences(
 export async function createCampaign(input: CreateCampaignInput) {
   const context = await getActiveWorkspaceContext();
   if ('error' in context) return { error: context.error };
+  if (!canManageCampaigns(context.role) && input.status !== 'draft') {
+    return { error: 'You do not have permission to activate campaigns' };
+  }
+  const permissionError = assertPermission(context.role, 'manageTemplates');
+  if (permissionError && input.status !== 'draft') return permissionError;
+  if (context.role === 'viewer') return { error: 'You do not have permission to create campaigns' };
   const { supabase, workspaceId } = context;
 
   const referenceError = await validateCampaignReferences(supabase, workspaceId, input);
@@ -94,6 +101,31 @@ export async function updateCampaign(input: UpdateCampaignInput) {
   if ('error' in context) return { error: context.error };
   const { supabase, workspaceId } = context;
 
+  if (context.role === 'viewer') {
+    return { error: 'You do not have permission to update campaigns' };
+  }
+
+  if (!canManageCampaigns(context.role)) {
+    if (input.status !== 'draft') {
+      return { error: 'You do not have permission to activate campaigns' };
+    }
+
+    const { data: existingCampaign, error: existingError } = await supabase
+      .from('campaigns')
+      .select('id, status')
+      .eq('id', input.id)
+      .eq('workspace_id', workspaceId)
+      .maybeSingle();
+
+    if (existingError || !existingCampaign) {
+      return { error: 'Campaign not found in active workspace' };
+    }
+
+    if (existingCampaign.status !== 'draft') {
+      return { error: 'You can only edit draft campaigns' };
+    }
+  }
+
   const referenceError = await validateCampaignReferences(supabase, workspaceId, input);
   if (referenceError) return { error: referenceError };
 
@@ -123,6 +155,8 @@ export async function updateCampaign(input: UpdateCampaignInput) {
 export async function deleteCampaign(id: string) {
   const context = await getActiveWorkspaceContext();
   if ('error' in context) return { error: context.error };
+  const permissionError = assertPermission(context.role, 'manageCampaigns');
+  if (permissionError) return permissionError;
   const { supabase, workspaceId } = context;
 
   const { error } = await supabase
@@ -143,6 +177,8 @@ export async function deleteCampaign(id: string) {
 export async function bulkUpdateCampaignStatus(ids: string[], status: CampaignStatus) {
   const context = await getActiveWorkspaceContext();
   if ('error' in context) return { error: context.error };
+  const permissionError = assertPermission(context.role, 'manageCampaigns');
+  if (permissionError) return permissionError;
   const { supabase, workspaceId } = context;
 
   if (ids.length === 0) return { success: true };
@@ -165,6 +201,8 @@ export async function bulkUpdateCampaignStatus(ids: string[], status: CampaignSt
 export async function bulkDeleteCampaigns(ids: string[]) {
   const context = await getActiveWorkspaceContext();
   if ('error' in context) return { error: context.error };
+  const permissionError = assertPermission(context.role, 'manageCampaigns');
+  if (permissionError) return permissionError;
   const { supabase, workspaceId } = context;
 
   if (ids.length === 0) return { success: true };

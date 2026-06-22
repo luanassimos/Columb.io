@@ -5,6 +5,7 @@ import { changePassword } from '@/app/actions/auth';
 import { saveSmtpSettings, deleteSmtpSettings } from '@/app/actions/smtp';
 import { SmtpSettings } from '@/types';
 import { useRouter } from 'next/navigation';
+import { hasPermission, WorkspaceRole } from '@/lib/permissions';
 import {
   Briefcase,
   Settings,
@@ -24,6 +25,7 @@ interface SettingsClientProps {
   activeWorkspace: { id: string; name: string; timezone?: string };
   smtpSettingsList: SmtpSettings[];
   updateWorkspaceSettings: (formData: FormData) => Promise<void>;
+  role: WorkspaceRole;
 }
 
 type TabType = 'workspace' | 'smtp' | 'security' | 'status';
@@ -32,9 +34,12 @@ export default function SettingsClient({
   activeWorkspace,
   smtpSettingsList,
   updateWorkspaceSettings,
+  role,
 }: SettingsClientProps) {
   const [activeTab, setActiveTab] = useState<TabType>('workspace');
   const router = useRouter();
+  const canManageWorkspace = hasPermission(role, 'manageWorkspace');
+  const canManageSmtp = hasPermission(role, 'manageSmtp');
 
   // Local state for interactive submit tracking
   const [isWorkspaceLoading, setIsWorkspaceLoading] = useState(false);
@@ -52,6 +57,7 @@ export default function SettingsClient({
 
   const handleWorkspaceSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (!canManageWorkspace) return;
     setIsWorkspaceLoading(true);
     const formData = new FormData(e.currentTarget);
     await updateWorkspaceSettings(formData);
@@ -60,6 +66,7 @@ export default function SettingsClient({
 
   const handleSmtpSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (!canManageSmtp) return;
     setIsSmtpLoading(true);
     setSmtpError(null);
 
@@ -92,6 +99,7 @@ export default function SettingsClient({
   };
 
   const handleDeleteSmtp = async (id: string, email: string) => {
+    if (!canManageSmtp) return;
     if (!window.confirm(`Are you sure you want to delete SMTP config for ${email}?`)) return;
     const result = await deleteSmtpSettings(id);
     if (result?.error) {
@@ -121,7 +129,7 @@ export default function SettingsClient({
 
   const navTabs = [
     { id: 'workspace' as TabType, label: 'Workspace Configuration', icon: Briefcase },
-    { id: 'smtp' as TabType,      label: 'SMTP Outbox Accounts',     icon: Server },
+    ...(canManageSmtp ? [{ id: 'smtp' as TabType, label: 'SMTP Outbox Accounts', icon: Server }] : []),
     { id: 'security' as TabType,  label: 'Security & Password',       icon: Lock },
     { id: 'status' as TabType,    label: 'System Status',              icon: Activity },
   ];
@@ -164,9 +172,17 @@ export default function SettingsClient({
             <div className="flex items-center gap-2 pb-3 border-b border-[#D8E0EA]">
               <Briefcase className="h-4.5 w-4.5 text-[#2D6BFF]" />
               <h2 className="text-sm font-bold text-[#002B6A]">Workspace Configuration</h2>
+              <span className="rounded-md bg-[#EAF2FF] px-2 py-0.5 text-[10px] font-bold capitalize text-[#475569]">
+                {role}
+              </span>
             </div>
 
             <form onSubmit={handleWorkspaceSubmit} className="space-y-4">
+              {!canManageWorkspace && (
+                <div className="p-3 bg-amber-50 border border-amber-200 text-xs text-amber-700 font-medium rounded-lg">
+                  Your role can view workspace settings but cannot change them.
+                </div>
+              )}
               <div className="space-y-1.5">
                 <label className="block text-xs font-semibold text-[#002B6A]">
                   Active Workspace Name
@@ -176,6 +192,7 @@ export default function SettingsClient({
                   name="workspaceName"
                   defaultValue={activeWorkspace.name}
                   required
+                  disabled={!canManageWorkspace}
                   className="w-full max-w-md px-3 py-2.5 bg-[#F7FAFF] border border-[#D8E0EA] rounded-lg text-sm text-[#061A40] placeholder-[#475569]/50 focus:outline-none focus:border-[#2D6BFF] focus:bg-white transition-all"
                 />
               </div>
@@ -186,6 +203,7 @@ export default function SettingsClient({
                 <select
                   name="timezone"
                   defaultValue={activeWorkspace.timezone || 'America/Sao_Paulo'}
+                  disabled={!canManageWorkspace}
                   className="w-full max-w-md px-3 py-2.5 bg-[#F7FAFF] border border-[#D8E0EA] rounded-lg text-sm text-[#061A40] focus:outline-none focus:border-[#2D6BFF] focus:bg-white transition-all cursor-pointer font-semibold"
                 >
                   <option value="America/Sao_Paulo">Brasília (UTC-3) - America/Sao_Paulo</option>
@@ -199,7 +217,7 @@ export default function SettingsClient({
               </div>
               <button
                 type="submit"
-                disabled={isWorkspaceLoading}
+                disabled={isWorkspaceLoading || !canManageWorkspace}
                 className="px-4 py-2.5 bg-[#2D6BFF] hover:bg-[#1b58ec] text-white rounded-lg text-xs font-bold transition-all shadow-sm shadow-[#2D6BFF]/10 flex items-center justify-center gap-2"
               >
                 {isWorkspaceLoading && <Loader2 className="h-3 w-3 animate-spin" />}

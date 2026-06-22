@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { switchWorkspace, createWorkspace } from '@/app/actions/workspace';
 import { ChevronDown, Plus, Check, Briefcase, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { WorkspaceRole } from '@/lib/permissions';
 
 interface Workspace {
   id: string;
@@ -14,12 +15,14 @@ interface WorkspaceSwitcherProps {
   workspaces: Workspace[];
   activeWorkspaceId: string;
   activeWorkspaceName: string;
+  activeWorkspaceRole: WorkspaceRole;
 }
 
 export default function WorkspaceSwitcher({
   workspaces,
   activeWorkspaceId,
   activeWorkspaceName,
+  activeWorkspaceRole,
 }: WorkspaceSwitcherProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
@@ -105,6 +108,9 @@ export default function WorkspaceSwitcher({
       >
         <Briefcase className="h-4 w-4 text-[#2D6BFF]" />
         <span className="font-semibold max-w-[120px] truncate">{localActiveName}</span>
+        <span className="hidden sm:inline rounded-md bg-white/70 px-1.5 py-0.5 text-[10px] font-bold capitalize text-[#475569]">
+          {activeWorkspaceRole}
+        </span>
         <ChevronDown className="h-3.5 w-3.5 text-[#002B6A]" />
       </button>
 

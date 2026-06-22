@@ -1,6 +1,7 @@
 'use server';
 
 import { getActiveWorkspaceContext } from '@/lib/workspace';
+import { assertPermission } from '@/lib/permissions';
 import { revalidatePath } from 'next/cache';
 
 export interface CreateTemplateInput {
@@ -19,6 +20,8 @@ export interface UpdateTemplateInput {
 export async function createTemplate(input: CreateTemplateInput) {
   const context = await getActiveWorkspaceContext();
   if ('error' in context) return { error: context.error };
+  const permissionError = assertPermission(context.role, 'manageTemplates');
+  if (permissionError) return permissionError;
   const { supabase, workspaceId } = context;
 
   const { data: template, error } = await supabase
@@ -44,6 +47,8 @@ export async function createTemplate(input: CreateTemplateInput) {
 export async function updateTemplate(input: UpdateTemplateInput) {
   const context = await getActiveWorkspaceContext();
   if ('error' in context) return { error: context.error };
+  const permissionError = assertPermission(context.role, 'manageTemplates');
+  if (permissionError) return permissionError;
   const { supabase, workspaceId } = context;
 
   const { error } = await supabase
@@ -68,6 +73,8 @@ export async function updateTemplate(input: UpdateTemplateInput) {
 export async function deleteTemplate(id: string) {
   const context = await getActiveWorkspaceContext();
   if ('error' in context) return { error: context.error };
+  const permissionError = assertPermission(context.role, 'deleteTemplates');
+  if (permissionError) return permissionError;
   const { supabase, workspaceId } = context;
 
   const { error } = await supabase

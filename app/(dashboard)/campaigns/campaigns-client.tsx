@@ -6,6 +6,7 @@ import CampaignModal from '@/components/campaign-modal';
 import { deleteCampaign, bulkUpdateCampaignStatus, bulkDeleteCampaigns } from '@/app/actions/campaign';
 import { useRouter } from 'next/navigation';
 import { Plus, Send, Edit2, Trash2, Loader2, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
+import { canManageCampaigns, WorkspaceRole } from '@/lib/permissions';
 
 type SortKey = 'name' | 'created_at' | 'status';
 type SortDir = 'asc' | 'desc';
@@ -62,6 +63,7 @@ interface CampaignsClientProps {
   templates: Template[];
   availableTags: string[];
   smtpSettingsList: SmtpSettings[];
+  role: WorkspaceRole;
 }
 
 export default function CampaignsClient({
@@ -69,8 +71,11 @@ export default function CampaignsClient({
   templates,
   availableTags,
   smtpSettingsList,
+  role,
 }: CampaignsClientProps) {
   const router = useRouter();
+  const canCreateCampaign = role !== 'viewer';
+  const canManageCampaignStatuses = canManageCampaigns(role);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [campaignToEdit, setCampaignToEdit] = useState<Campaign | null>(null);
 
@@ -91,6 +96,7 @@ export default function CampaignsClient({
   const [bulkError, setBulkError] = useState<string | null>(null);
 
   const handleSelectRow = (id: string) => {
+    if (!canManageCampaignStatuses) return;
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) {
@@ -103,6 +109,7 @@ export default function CampaignsClient({
   };
 
   const handleSelectAll = (filteredRows: Campaign[]) => {
+    if (!canManageCampaignStatuses) return;
     setSelectedIds((prev) => {
       const next = new Set<string>();
       const allSelected = filteredRows.length > 0 && filteredRows.every(c => prev.has(c.id));
@@ -114,6 +121,7 @@ export default function CampaignsClient({
   };
 
   const handleBulkStatusChange = async (status: CampaignStatus) => {
+    if (!canManageCampaignStatuses) return;
     setIsBulkProcessing(true);
     setBulkError(null);
     setIsActionsOpen(false);
@@ -131,6 +139,7 @@ export default function CampaignsClient({
   };
 
   const handleBulkDelete = async () => {
+    if (!canManageCampaignStatuses) return;
     if (!window.confirm(`Are you sure you want to delete ${selectedIds.size} campaigns?`)) {
       return;
     }
@@ -200,6 +209,9 @@ export default function CampaignsClient({
     </button>
   );
 
+  const canEditCampaign = (campaign: Campaign) =>
+    canManageCampaignStatuses || (role === 'member' && campaign.status === 'draft');
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -210,17 +222,19 @@ export default function CampaignsClient({
             Build drip outreach sequences, launch cold mail campaigns, and oversee automation lists.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            setCampaignToEdit(null);
-            setIsModalOpen(true);
-          }}
-          className="flex items-center gap-2 px-4 py-2 bg-[#2D6BFF] hover:bg-[#1b58ec] text-white rounded-lg text-sm font-semibold transition-all shadow-sm shadow-[#2D6BFF]/30"
-        >
-          <Plus className="h-4 w-4" />
-          Create Campaign
-        </button>
+        {canCreateCampaign && (
+          <button
+            type="button"
+            onClick={() => {
+              setCampaignToEdit(null);
+              setIsModalOpen(true);
+            }}
+            className="flex items-center gap-2 px-4 py-2 bg-[#2D6BFF] hover:bg-[#1b58ec] text-white rounded-lg text-sm font-semibold transition-all shadow-sm shadow-[#2D6BFF]/30"
+          >
+            <Plus className="h-4 w-4" />
+            Create Campaign
+          </button>
+        )}
       </div>
 
       {campaigns.length === 0 ? (
@@ -235,15 +249,17 @@ export default function CampaignsClient({
               Your campaign list is empty. Click <strong>Create Campaign</strong> to configure your first outreach list.
             </p>
           </div>
-          <button
-            onClick={() => {
-              setCampaignToEdit(null);
-              setIsModalOpen(true);
-            }}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-[#2D6BFF] hover:bg-[#1b58ec] text-white rounded-lg text-sm font-semibold transition-all"
-          >
-            <Plus className="h-4 w-4" /> Create First Campaign
-          </button>
+          {canCreateCampaign && (
+            <button
+              onClick={() => {
+                setCampaignToEdit(null);
+                setIsModalOpen(true);
+              }}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-[#2D6BFF] hover:bg-[#1b58ec] text-white rounded-lg text-sm font-semibold transition-all"
+            >
+              <Plus className="h-4 w-4" /> Create First Campaign
+            </button>
+          )}
         </div>
       ) : (
         /* Table */
@@ -252,6 +268,7 @@ export default function CampaignsClient({
           <div className="px-4 py-3 border-b border-[#D8E0EA] flex items-center justify-between gap-3">
             <div className="flex items-center gap-3 flex-1 min-w-[280px]">
               {/* Actions Dropdown Button */}
+              {canManageCampaignStatuses && (
               <div className="relative">
                 <button
                   type="button"
@@ -296,6 +313,7 @@ export default function CampaignsClient({
                   </>
                 )}
               </div>
+              )}
 
               <input
                 type="text"
@@ -323,15 +341,17 @@ export default function CampaignsClient({
             <table className="w-full text-sm">
               <thead className="bg-[#F7FAFF] border-b border-[#D8E0EA]">
                 <tr>
-                  <th className="px-4 py-3 text-left w-10">
-                    <input
-                      type="checkbox"
-                      checked={filtered.length > 0 && filtered.every(c => selectedIds.has(c.id))}
-                      onChange={() => handleSelectAll(filtered)}
-                      className="rounded border-[#D8E0EA] text-[#2D6BFF] focus:ring-[#2D6BFF] h-4 w-4 cursor-pointer"
-                      title="Select all"
-                    />
-                  </th>
+                  {canManageCampaignStatuses && (
+                    <th className="px-4 py-3 text-left w-10">
+                      <input
+                        type="checkbox"
+                        checked={filtered.length > 0 && filtered.every(c => selectedIds.has(c.id))}
+                        onChange={() => handleSelectAll(filtered)}
+                        className="rounded border-[#D8E0EA] text-[#2D6BFF] focus:ring-[#2D6BFF] h-4 w-4 cursor-pointer"
+                        title="Select all"
+                      />
+                    </th>
+                  )}
                   <th className="px-4 py-3 text-left w-40"><ThBtn col="status" label="Status" /></th>
                   <th className="px-4 py-3 text-left w-1/3"><ThBtn col="name" label="Campaign Name" /></th>
                   <th className="px-4 py-3 text-left">Email Template</th>
@@ -342,7 +362,7 @@ export default function CampaignsClient({
               <tbody className="divide-y divide-[#D8E0EA]">
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-12 text-center text-sm text-[#475569]">
+                    <td colSpan={canManageCampaignStatuses ? 6 : 5} className="px-4 py-12 text-center text-sm text-[#475569]">
                       No campaigns match your search.
                     </td>
                   </tr>
@@ -354,14 +374,16 @@ export default function CampaignsClient({
                         selectedIds.has(c.id) ? 'bg-[#F7FAFF]/80' : ''
                       }`}
                     >
-                      <td className="px-4 py-3 text-left w-10">
-                        <input
-                          type="checkbox"
-                          checked={selectedIds.has(c.id)}
-                          onChange={() => handleSelectRow(c.id)}
-                          className="rounded border-[#D8E0EA] text-[#2D6BFF] focus:ring-[#2D6BFF] h-4 w-4 cursor-pointer"
-                        />
-                      </td>
+                      {canManageCampaignStatuses && (
+                        <td className="px-4 py-3 text-left w-10">
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.has(c.id)}
+                            onChange={() => handleSelectRow(c.id)}
+                            className="rounded border-[#D8E0EA] text-[#2D6BFF] focus:ring-[#2D6BFF] h-4 w-4 cursor-pointer"
+                          />
+                        </td>
+                      )}
                       {/* Status */}
                       <td className="px-4 py-3">
                         <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold border capitalize ${STATUS_STYLES[c.status]} border-current/10`}>
@@ -383,25 +405,29 @@ export default function CampaignsClient({
                       {/* Actions */}
                       <td className="px-4 py-3 text-right whitespace-nowrap">
                         <div className="flex justify-end items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setCampaignToEdit(c);
-                              setIsModalOpen(true);
-                            }}
-                            className="p-1 text-slate-400 hover:text-[#2D6BFF] hover:bg-[#EAF2FF] rounded transition-all"
-                            title="Edit Campaign"
-                          >
-                            <Edit2 className="h-4 w-4" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setCampaignToDelete(c)}
-                            className="p-1 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded transition-all"
-                            title="Delete Campaign"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                          {canEditCampaign(c) && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setCampaignToEdit(c);
+                                setIsModalOpen(true);
+                              }}
+                              className="p-1 text-slate-400 hover:text-[#2D6BFF] hover:bg-[#EAF2FF] rounded transition-all"
+                              title="Edit Campaign"
+                            >
+                              <Edit2 className="h-4 w-4" />
+                            </button>
+                          )}
+                          {canManageCampaignStatuses && (
+                            <button
+                              type="button"
+                              onClick={() => setCampaignToDelete(c)}
+                              className="p-1 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded transition-all"
+                              title="Delete Campaign"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -419,17 +445,20 @@ export default function CampaignsClient({
       )}
 
       {/* Slide-in Modal */}
-      <CampaignModal
-        isOpen={isModalOpen}
-        onClose={() => {
-          setIsModalOpen(false);
-          setCampaignToEdit(null);
-        }}
-        templates={templates}
-        campaignToEdit={campaignToEdit}
-        availableTags={availableTags}
-        smtpSettingsList={smtpSettingsList}
-      />
+      {canCreateCampaign && (
+        <CampaignModal
+          isOpen={isModalOpen}
+          onClose={() => {
+            setIsModalOpen(false);
+            setCampaignToEdit(null);
+          }}
+          templates={templates}
+          campaignToEdit={campaignToEdit}
+          availableTags={availableTags}
+          smtpSettingsList={smtpSettingsList}
+          canManageStatus={canManageCampaignStatuses}
+        />
+      )}
 
       {/* Delete Confirmation Modal */}
       {campaignToDelete && (

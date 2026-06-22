@@ -1,11 +1,14 @@
 'use server';
 
 import { getActiveWorkspaceContext } from '@/lib/workspace';
+import { assertPermission } from '@/lib/permissions';
 import { revalidatePath } from 'next/cache';
 
 export async function getSmtpSettings() {
   const context = await getActiveWorkspaceContext();
   if ('error' in context) return { error: context.error };
+  const permissionError = assertPermission(context.role, 'manageSmtp');
+  if (permissionError) return permissionError;
   const { supabase, workspaceId } = context;
 
   const { data, error } = await supabase
@@ -35,6 +38,8 @@ export interface SaveSmtpInput {
 export async function saveSmtpSettings(input: SaveSmtpInput) {
   const context = await getActiveWorkspaceContext();
   if ('error' in context) return { error: context.error };
+  const permissionError = assertPermission(context.role, 'manageSmtp');
+  if (permissionError) return permissionError;
   const { supabase, workspaceId } = context;
 
   const updateData: any = {
@@ -81,6 +86,8 @@ export async function saveSmtpSettings(input: SaveSmtpInput) {
 export async function deleteSmtpSettings(id: string) {
   const context = await getActiveWorkspaceContext();
   if ('error' in context) return { error: context.error };
+  const permissionError = assertPermission(context.role, 'manageSmtp');
+  if (permissionError) return permissionError;
   const { supabase, workspaceId } = context;
 
   const { error } = await supabase

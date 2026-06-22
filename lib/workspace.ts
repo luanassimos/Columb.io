@@ -1,4 +1,5 @@
 import { createServerClient } from '@/lib/supabase/server';
+import { WorkspaceRole } from '@/lib/permissions';
 
 export async function getActiveWorkspaceContext() {
   const supabase = await createServerClient();
@@ -23,7 +24,7 @@ export async function getActiveWorkspaceContext() {
 
   const { data: membership, error: membershipError } = await supabase
     .from('workspace_members')
-    .select('workspace_id')
+    .select('workspace_id, role')
     .eq('workspace_id', profile.workspace_id)
     .eq('user_id', user.id)
     .maybeSingle();
@@ -36,5 +37,6 @@ export async function getActiveWorkspaceContext() {
     supabase,
     user,
     workspaceId: profile.workspace_id as string,
+    role: membership.role as WorkspaceRole,
   };
 }

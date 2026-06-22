@@ -5,15 +5,18 @@ import { Bell, MessageSquare, CheckCircle, Clock, AlertTriangle, Check, Loader2 
 import { markNotificationRead, markAllNotificationsRead } from '@/app/actions/notification';
 import { Notification } from '@/types';
 import { useRouter } from 'next/navigation';
+import { hasPermission, WorkspaceRole } from '@/lib/permissions';
 
 interface NotificationCenterProps {
   notifications: Notification[];
   workspaceId: string;
+  role: WorkspaceRole;
 }
 
 export default function NotificationCenter({
   notifications,
   workspaceId,
+  role,
 }: NotificationCenterProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [loadingId, setLoadingId] = useState<string | null>(null);
@@ -22,6 +25,7 @@ export default function NotificationCenter({
   const router = useRouter();
 
   const unreadCount = notifications.filter((n) => !n.read).length;
+  const canMutateNotifications = hasPermission(role, 'manageWorkspace');
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -85,7 +89,7 @@ export default function NotificationCenter({
         <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-xl border border-[#D8E0EA] z-[100] p-1">
           <div className="flex items-center justify-between px-3 py-2 border-b border-[#D8E0EA] mb-1">
             <span className="text-xs font-bold text-[#002B6A]">Notifications</span>
-            {unreadCount > 0 && (
+            {unreadCount > 0 && canMutateNotifications && (
               <button
                 type="button"
                 onClick={handleMarkAllRead}
@@ -126,7 +130,7 @@ export default function NotificationCenter({
                       {new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </p>
                   </div>
-                  {!n.read && (
+                  {!n.read && canMutateNotifications && (
                     <button
                       type="button"
                       onClick={() => handleMarkRead(n.id)}

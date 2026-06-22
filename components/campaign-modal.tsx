@@ -13,6 +13,7 @@ interface CampaignModalProps {
   campaignToEdit?: Campaign | null;
   availableTags: string[];
   smtpSettingsList: SmtpSettings[];
+  canManageStatus: boolean;
 }
 
 const STATUS_OPTIONS: { value: CampaignStatus; label: string; color: string }[] = [
@@ -28,6 +29,7 @@ export default function CampaignModal({
   campaignToEdit,
   availableTags,
   smtpSettingsList,
+  canManageStatus,
 }: CampaignModalProps) {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -57,7 +59,7 @@ export default function CampaignModal({
       if (campaignToEdit) {
         setName(campaignToEdit.name || '');
         setTemplateId(campaignToEdit.template_id || '');
-        setStatus(campaignToEdit.status || 'draft');
+        setStatus(canManageStatus ? campaignToEdit.status || 'draft' : 'draft');
         setScheduleDays(campaignToEdit.schedule_days || []);
         setScheduleTime(campaignToEdit.schedule_time || '09:00');
         setTargetTags(campaignToEdit.target_tags || []);
@@ -75,7 +77,7 @@ export default function CampaignModal({
       }
       setError(null);
     }
-  }, [isOpen, campaignToEdit, templates, smtpSettingsList]);
+  }, [isOpen, campaignToEdit, templates, smtpSettingsList, canManageStatus]);
 
   // Close on Escape
   useEffect(() => {
@@ -420,11 +422,15 @@ export default function CampaignModal({
               <Tag className="h-3.5 w-3.5" /> Campaign Status <span className="text-rose-400">*</span>
             </label>
             <div className="flex flex-wrap gap-2">
-              {STATUS_OPTIONS.map(opt => (
+              {(canManageStatus ? STATUS_OPTIONS : STATUS_OPTIONS.filter((opt) => opt.value === 'draft')).map(opt => (
                 <button
                   key={opt.value}
                   type="button"
-                  onClick={() => setStatus(opt.value)}
+                  onClick={() => {
+                    if (canManageStatus || opt.value === 'draft') {
+                      setStatus(opt.value);
+                    }
+                  }}
                   className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
                     status === opt.value
                       ? `${opt.color} border-current ring-2 ring-current/30`

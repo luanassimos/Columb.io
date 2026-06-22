@@ -8,10 +8,10 @@ export default async function TemplatesPage() {
   const context = await getActiveWorkspaceContext();
   if ('error' in context) {
     if (context.error === 'Unauthorized') redirect('/login');
-    return <TemplatesClient templates={[]} />;
+    return <TemplatesClient templates={[]} role="viewer" />;
   }
 
-  const { supabase, workspaceId } = context;
+  const { supabase, workspaceId, role } = context;
 
   // Fetch templates for the active workspace
   let templates: Template[] = [];
@@ -25,5 +25,5 @@ export default async function TemplatesPage() {
     if (!error) templates = data || [];
   } catch {}
 
-  return <TemplatesClient templates={templates} />;
+  return <TemplatesClient templates={templates} role={role} />;
 }

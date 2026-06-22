@@ -1,4 +1,5 @@
 export type ContactStatus = 'new' | 'contacted' | 'waiting' | 'replied' | 'converted' | 'closed';
+export type WorkspaceRole = 'owner' | 'admin' | 'manager' | 'member' | 'viewer';
 
 export interface Workspace {
   id: string;
