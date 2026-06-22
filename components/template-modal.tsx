@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createTemplate, updateTemplate } from '@/app/actions/template';
 import { Template } from '@/types';
-import { X, Plus, Loader2, Mail, Edit3, Type, FileText } from 'lucide-react';
+import { X, Plus, Loader2, Edit3, Type, FileText } from 'lucide-react';
 
 interface TemplateModalProps {
   isOpen: boolean;

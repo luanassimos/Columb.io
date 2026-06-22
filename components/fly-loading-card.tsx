@@ -1,23 +1,24 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Image from 'next/image';
 import { RefreshCw } from 'lucide-react';
 import SendSuccessModal from './send-success-modal';
 
-export default function FlyLoadingCard() {
-  const images = [
-    '/fly01.webp',
-    '/fly02.webp',
-    '/fly03.webp',
-    '/fly02.webp'
-  ];
+const FLY_FRAMES = [
+  '/fly01.webp',
+  '/fly02.webp',
+  '/fly03.webp',
+  '/fly02.webp',
+];
 
+export default function FlyLoadingCard() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setCurrentIndex((prevIndex) => (prevIndex + 1) % images.length);
+      setCurrentIndex((prevIndex) => (prevIndex + 1) % FLY_FRAMES.length);
     }, 150); // 150ms per frame for a balanced wing flap/animation
 
     return () => clearInterval(interval);
@@ -26,9 +27,11 @@ export default function FlyLoadingCard() {
   return (
     <div className="glass-card rounded-2xl border border-[#D8E0EA] p-6 text-center max-w-sm mx-auto shadow-sm flex flex-col items-center justify-center space-y-4 bg-white/60 backdrop-blur-sm w-full">
       <div className="relative w-36 h-36 flex items-center justify-center overflow-hidden bg-[#EAF2FF] rounded-full border border-[#D8E0EA]/60">
-        <img
-          src={images[currentIndex]}
+        <Image
+          src={FLY_FRAMES[currentIndex]}
           alt="Outbound Animation"
+          width={96}
+          height={96}
           className="w-24 h-24 object-contain transition-all duration-150 transform hover:scale-105 mix-blend-multiply"
         />
       </div>

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { signOut } from '@/app/actions/auth';
@@ -50,7 +51,13 @@ export default function Sidebar({ profileName, userEmail }: SidebarProps) {
             className="h-16 flex items-center border-b border-[#061A40]/30 transition-all duration-300 ease-in-out px-5 justify-between"
           >
             <div className="flex items-center gap-3">
-              <img src="/columb_symbol_white.svg" alt="Columb Logo" className="h-10 w-10 object-contain shrink-0" />
+              <Image
+                src="/columb_symbol_white.svg"
+                alt="Columb Logo"
+                width={40}
+                height={40}
+                className="h-10 w-10 object-contain shrink-0"
+              />
               <span
                 className={`font-bold text-xl text-white tracking-wide transition-all duration-300 ease-in-out origin-left whitespace-nowrap ${
                   isCollapsed ? 'opacity-0 scale-95 w-0 overflow-hidden pointer-events-none' : 'opacity-100 scale-100 w-auto'
