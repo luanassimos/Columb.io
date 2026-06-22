@@ -3,59 +3,139 @@ import { compileEmail } from '@/services/email-compiler';
 import { sendEmail } from '@/services/resend';
 
 export async function GET(request: Request) {
-  if (!(await isValidRequest(request))) {
-    return Response.json({ error: 'Unauthorized' }, { status: 401 });
-  }
   const { searchParams } = new URL(request.url);
   const force = searchParams.get('force') === 'true';
-  return processQueue(force);
+  const auth = await getExecutionContext(request, force, searchParams.get('workspace_id'));
+
+  if ('response' in auth) {
+    return auth.response;
+  }
+
+  return processQueue({ force, context: auth });
 }
 
 export async function POST(request: Request) {
-  if (!(await isValidRequest(request))) {
-    return Response.json({ error: 'Unauthorized' }, { status: 401 });
-  }
   const { searchParams } = new URL(request.url);
   const force = searchParams.get('force') === 'true';
-  return processQueue(force);
+  const auth = await getExecutionContext(request, force, searchParams.get('workspace_id'));
+
+  if ('response' in auth) {
+    return auth.response;
+  }
+
+  return processQueue({ force, context: auth });
 }
 
-async function isValidRequest(request: Request): Promise<boolean> {
-  // 1. Bypass validation in local development when CRON_SECRET is not set
-  if (process.env.NODE_ENV === 'development' && !process.env.CRON_SECRET) {
-    return true;
-  }
-  
-  // 2. Check token authorization (for external cron services)
+type ExecutionContext =
+  | { type: 'cron'; workspaceId?: string }
+  | { type: 'user'; userId: string; workspaceId: string };
+
+type AuthResult = ExecutionContext | { response: Response };
+
+function jsonError(message: string, status: number) {
+  return Response.json({ error: message }, { status });
+}
+
+async function getExecutionContext(
+  request: Request,
+  force: boolean,
+  requestedWorkspaceId: string | null
+): Promise<AuthResult> {
+  const cronSecret = process.env.CRON_SECRET?.trim();
   const authHeader = request.headers.get('authorization');
-  if (authHeader === `Bearer ${process.env.CRON_SECRET}`) {
-    return true;
+
+  if (authHeader) {
+    if (!authHeader.startsWith('Bearer ')) {
+      return { response: jsonError('Unauthorized', 401) };
+    }
+
+    if (!cronSecret) {
+      return { response: jsonError('Cron execution is not configured', 403) };
+    }
+
+    if (authHeader !== `Bearer ${cronSecret}`) {
+      return { response: jsonError('Unauthorized', 401) };
+    }
+
+    if (force && !requestedWorkspaceId) {
+      return {
+        response: jsonError('force=true requires a workspace_id when using cron credentials', 400),
+      };
+    }
+
+    return {
+      type: 'cron',
+      workspaceId: requestedWorkspaceId || undefined,
+    };
   }
 
-  // 3. Check profile session authorization (for manual button clicks in the dashboard)
   try {
     const { createServerClient } = await import('@/lib/supabase/server');
     const supabase = await createServerClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      return true;
-    }
-  } catch (err) {
-    console.error('[Cron Auth] Error verifying session:', err);
-  }
 
-  return false;
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError || !user) {
+      return { response: jsonError('Unauthorized', 401) };
+    }
+
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('workspace_id')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    if (profileError) {
+      console.error('[Send Auth] Error fetching active workspace:', profileError.message);
+      return { response: jsonError('Could not determine active workspace', 400) };
+    }
+
+    if (!profile?.workspace_id) {
+      return { response: jsonError('Active workspace is required for manual execution', 400) };
+    }
+
+    if (requestedWorkspaceId && requestedWorkspaceId !== profile.workspace_id) {
+      return { response: jsonError('You do not have permission to process this workspace', 403) };
+    }
+
+    return {
+      type: 'user',
+      userId: user.id,
+      workspaceId: profile.workspace_id,
+    };
+  } catch (err) {
+    console.error('[Send Auth] Error verifying session:', err);
+    return { response: jsonError('Unauthorized', 401) };
+  }
 }
 
-async function processQueue(force: boolean = false) {
-  console.log(`[Cron Job] Triggering campaign dispatch processor (force=${force})...`);
+async function processQueue({
+  force = false,
+  context,
+}: {
+  force?: boolean;
+  context: ExecutionContext;
+}) {
+  const scopedWorkspaceId = context.workspaceId;
+  console.log(
+    `[Cron Job] Triggering campaign dispatch processor (force=${force}, scope=${scopedWorkspaceId || 'all-scheduled'})...`
+  );
   const supabase = createAdminClient();
 
   // 2. Fetch all running campaigns with workspace timezone
-  const { data: runningCampaigns, error: cError } = await supabase
+  let campaignQuery = supabase
     .from('campaigns')
     .select('*, workspaces(timezone)')
     .eq('status', 'running');
+
+  if (scopedWorkspaceId) {
+    campaignQuery = campaignQuery.eq('workspace_id', scopedWorkspaceId);
+  }
+
+  const { data: runningCampaigns, error: cError } = await campaignQuery;
 
   if (cError) {
     console.error('[Cron Job] Error fetching campaigns:', cError);
@@ -139,9 +219,15 @@ async function processQueue(force: boolean = false) {
 
       // Queue email jobs for matching contacts that don't have one already
       for (const contact of matchingContacts) {
+        if (contact.workspace_id !== campaign.workspace_id) {
+          console.error(`[Cron Job] Skipping contact ${contact.id}: workspace mismatch.`);
+          continue;
+        }
+
         const { data: existingJob, error: jobCheckErr } = await supabase
           .from('email_jobs')
           .select('id')
+          .eq('workspace_id', campaign.workspace_id)
           .eq('campaign_id', campaign.id)
           .eq('contact_id', contact.id)
           .maybeSingle();
@@ -177,10 +263,16 @@ async function processQueue(force: boolean = false) {
   }
 
   // 5. Query and process all queued jobs
-  const { data: queuedJobs, error: queueFetchErr } = await supabase
+  let queuedJobsQuery = supabase
     .from('email_jobs')
     .select('*, campaigns(*), templates(*), contacts(*)')
     .eq('status', 'queued');
+
+  if (scopedWorkspaceId) {
+    queuedJobsQuery = queuedJobsQuery.eq('workspace_id', scopedWorkspaceId);
+  }
+
+  const { data: queuedJobs, error: queueFetchErr } = await queuedJobsQuery;
 
   if (queueFetchErr) {
     console.error('[Cron Job] Error fetching queued jobs:', queueFetchErr);
@@ -194,6 +286,28 @@ async function processQueue(force: boolean = false) {
 
   for (const job of (queuedJobs || [])) {
     try {
+      const jobWorkspaceId = job.workspace_id;
+      const campaignWorkspaceId = job.campaigns?.workspace_id;
+      const contactWorkspaceId = job.contacts?.workspace_id;
+      const templateWorkspaceId = job.templates?.workspace_id;
+
+      if (
+        campaignWorkspaceId !== jobWorkspaceId ||
+        contactWorkspaceId !== jobWorkspaceId ||
+        templateWorkspaceId !== jobWorkspaceId
+      ) {
+        console.error(`[Cron Job] Refusing to send job ID ${job.id}: workspace mismatch.`);
+        await supabase
+          .from('email_jobs')
+          .update({
+            status: 'failed',
+            error_message: 'Workspace mismatch prevented dispatch',
+          })
+          .eq('id', job.id);
+        failedCount++;
+        continue;
+      }
+
       // A. Update job status to sending to lock it
       await supabase
         .from('email_jobs')
