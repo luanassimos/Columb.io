@@ -85,6 +85,9 @@ export async function deleteTemplate(id: string) {
 
   if (error) {
     console.error('Error deleting template:', error);
+    if (error.code === '23503') {
+      return { error: 'Este modelo não pode ser excluído porque está associado a uma ou mais campanhas. Por favor, remova as campanhas relacionadas antes de tentar novamente.' };
+    }
     return { error: error.message };
   }
 

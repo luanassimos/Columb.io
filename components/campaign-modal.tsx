@@ -329,14 +329,18 @@ export default function CampaignModal({
               value={templateId}
               onChange={e => setTemplateId(e.target.value)}
               disabled={templates.length === 0}
-              className="w-full px-3 py-2.5 rounded-lg border border-[#D8E0EA] bg-[#F7FAFF] text-sm text-[#061A40] focus:outline-none focus:border-[#2D6BFF] focus:bg-white transition-all"
+              className="w-full px-3 py-2.5 rounded-lg border border-[#D8E0EA] bg-[#F7FAFF] text-sm text-[#061A40] focus:outline-none focus:border-[#2D6BFF] focus:bg-white transition-all font-medium"
             >
-              {templates.length === 0 && (
+              {templates.length === 0 ? (
                 <option value="">No templates available</option>
+              ) : (
+                <>
+                  <option value="" disabled>-- Selecione um Modelo --</option>
+                  {templates.map(t => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </>
               )}
-              {templates.map(t => (
-                <option key={t.id} value={t.id}>{t.name}</option>
-              ))}
             </select>
           </div>
 

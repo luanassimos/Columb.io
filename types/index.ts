@@ -47,7 +47,7 @@ export interface Campaign {
   id: string;
   workspace_id: string;
   name: string;
-  template_id: string;
+  template_id?: string | null;
   status: CampaignStatus;
   schedule_days: number[];
   schedule_time: string;
@@ -65,7 +65,7 @@ export interface FollowupStep {
   id: string;
   workspace_id: string;
   campaign_id: string;
-  template_id: string;
+  template_id?: string | null;
   delay_days: number;
   step_number: number;
   created_at: string;
@@ -81,7 +81,7 @@ export interface EmailJob {
   workspace_id: string;
   campaign_id: string;
   contact_id: string;
-  template_id: string;
+  template_id?: string | null;
   status: JobStatus;
   sent_at?: string | null;
   error_message?: string | null;
