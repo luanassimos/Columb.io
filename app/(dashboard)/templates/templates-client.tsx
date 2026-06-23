@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { Template } from '@/types';
 import TemplateModal from '@/components/template-modal';
-import { deleteTemplate } from '@/app/actions/template';
+import { deleteTemplate, bulkDeleteTemplates } from '@/app/actions/template';
 import { useRouter } from 'next/navigation';
 import { Plus, Mail, Edit2, Trash2, Loader2, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
 import { hasPermission, WorkspaceRole } from '@/lib/permissions';
@@ -14,6 +14,11 @@ type SortDir = 'asc' | 'desc';
 function formatDate(iso?: string | null) {
   if (!iso) return '—';
   return new Date(iso).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+function stripHtml(html: string) {
+  if (!html) return '';
+  return html.replace(/<[^>]*>/g, '');
 }
 
 interface TemplatesClientProps {
@@ -27,6 +32,12 @@ export default function TemplatesClient({ templates, role }: TemplatesClientProp
   const canDeleteTemplates = hasPermission(role, 'deleteTemplates');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [templateToEdit, setTemplateToEdit] = useState<Template | null>(null);
+
+  // Bulk selection and actions
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isActionsOpen, setIsActionsOpen] = useState(false);
+  const [isBulkProcessing, setIsBulkProcessing] = useState(false);
+  const [bulkError, setBulkError] = useState<string | null>(null);
 
   // Sorting, filtering, searching
   const [sortKey, setSortKey] = useState<SortKey>('created_at');
@@ -44,6 +55,53 @@ export default function TemplatesClient({ templates, role }: TemplatesClientProp
     } else {
       setSortKey(key);
       setSortDir('asc');
+    }
+  };
+
+  const handleSelectRow = (id: string) => {
+    if (!canEditTemplates) return;
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const handleSelectAll = (filteredRows: Template[]) => {
+    if (!canEditTemplates) return;
+    setSelectedIds((prev) => {
+      const next = new Set<string>();
+      const allSelected = filteredRows.length > 0 && filteredRows.every(t => prev.has(t.id));
+      if (!allSelected) {
+        filteredRows.forEach(t => next.add(t.id));
+      }
+      return next;
+    });
+  };
+
+  const handleBulkDelete = async () => {
+    if (!canDeleteTemplates) return;
+    if (!window.confirm(`Are you sure you want to delete ${selectedIds.size} templates?`)) {
+      return;
+    }
+
+    setIsBulkProcessing(true);
+    setBulkError(null);
+    setIsActionsOpen(false);
+
+    const idsArray = Array.from(selectedIds);
+    const result = await bulkDeleteTemplates(idsArray);
+
+    setIsBulkProcessing(false);
+    if (result?.error) {
+      setBulkError(result.error);
+    } else {
+      setSelectedIds(new Set());
+      router.refresh();
     }
   };
 
@@ -132,21 +190,80 @@ export default function TemplatesClient({ templates, role }: TemplatesClientProp
       ) : (
         /* Table */
         <div className="bg-white rounded-2xl border border-[#D8E0EA] overflow-hidden shadow-sm">
-          {/* Search */}
-          <div className="px-4 py-3 border-b border-[#D8E0EA]">
-            <input
-              type="text"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Search by template name, subject or body content…"
-              className="w-full max-w-sm px-3 py-1.5 rounded-lg border border-[#D8E0EA] bg-[#F7FAFF] text-sm text-[#061A40] placeholder-[#475569]/50 focus:outline-none focus:border-[#2D6BFF] transition-all"
-            />
+          {/* Search & Actions */}
+          <div className="px-4 py-3 border-b border-[#D8E0EA] flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 flex-1 min-w-[280px]">
+              {canEditTemplates && (
+                <div className="relative">
+                  <button
+                    type="button"
+                    disabled={selectedIds.size === 0 || isBulkProcessing}
+                    onClick={() => setIsActionsOpen(!isActionsOpen)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#D8E0EA] bg-white text-xs font-semibold text-[#002B6A] hover:bg-[#F7FAFF] disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+                  >
+                    {isBulkProcessing ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-[#002B6A]" />
+                    ) : (
+                      'Actions'
+                    )}
+                    <ChevronDown className="h-3 w-3" />
+                  </button>
+                  {isActionsOpen && selectedIds.size > 0 && (
+                    <>
+                      <div className="fixed inset-0 z-10" onClick={() => setIsActionsOpen(false)} />
+                      <div className="absolute left-0 mt-1.5 w-44 bg-white border border-[#D8E0EA] rounded-lg shadow-lg py-1.5 z-20">
+                        {canDeleteTemplates && (
+                          <button
+                            type="button"
+                            onClick={handleBulkDelete}
+                            className="w-full text-left px-3 py-2 text-xs text-rose-600 hover:bg-rose-50 transition-colors font-semibold cursor-pointer"
+                          >
+                            Delete Selected
+                          </button>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+
+              <input
+                type="text"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Search by template name, subject or body content…"
+                className="w-full max-w-sm px-3 py-1.5 rounded-lg border border-[#D8E0EA] bg-[#F7FAFF] text-sm text-[#061A40] placeholder-[#475569]/50 focus:outline-none focus:border-[#2D6BFF] transition-all"
+              />
+            </div>
+
+            {selectedIds.size > 0 && (
+              <span className="text-xs text-[#475569] font-semibold bg-[#EAF2FF] px-2.5 py-1 rounded-full border border-[#2D6BFF]/20">
+                {selectedIds.size} selected
+              </span>
+            )}
           </div>
+
+          {bulkError && (
+            <div className="mx-4 mt-3 p-3 bg-rose-50 border border-rose-200 text-xs text-rose-600 font-medium rounded-lg">
+              {bulkError}
+            </div>
+          )}
 
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-[#F7FAFF] border-b border-[#D8E0EA]">
                 <tr>
+                  {canEditTemplates && (
+                    <th className="px-4 py-3 text-left w-10">
+                      <input
+                        type="checkbox"
+                        checked={filtered.length > 0 && filtered.every(t => selectedIds.has(t.id))}
+                        onChange={() => handleSelectAll(filtered)}
+                        className="rounded border-[#D8E0EA] text-[#2D6BFF] focus:ring-[#2D6BFF] h-4 w-4 cursor-pointer"
+                        title="Select all"
+                      />
+                    </th>
+                  )}
                   <th className="px-4 py-3 text-left w-1/4"><ThBtn col="name" label="Template Name" /></th>
                   <th className="px-4 py-3 text-left w-1/3"><ThBtn col="subject" label="Subject" /></th>
                   <th className="px-4 py-3 text-left">Body Preview</th>
@@ -159,13 +276,23 @@ export default function TemplatesClient({ templates, role }: TemplatesClientProp
               <tbody className="divide-y divide-[#D8E0EA]">
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={canEditTemplates || canDeleteTemplates ? 5 : 4} className="px-4 py-12 text-center text-sm text-[#475569]">
+                    <td colSpan={4 + (canEditTemplates ? 1 : 0) + (canEditTemplates || canDeleteTemplates ? 1 : 0)} className="px-4 py-12 text-center text-sm text-[#475569]">
                       No templates match your search.
                     </td>
                   </tr>
                 ) : (
                   filtered.map(t => (
                     <tr key={t.id} className="hover:bg-[#F7FAFF] transition-colors group">
+                      {canEditTemplates && (
+                        <td className="px-4 py-3 w-10" onClick={e => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.has(t.id)}
+                            onChange={() => handleSelectRow(t.id)}
+                            className="rounded border-[#D8E0EA] text-[#2D6BFF] focus:ring-[#2D6BFF] h-4 w-4 cursor-pointer"
+                          />
+                        </td>
+                      )}
                       {/* Name */}
                       <td className="px-4 py-3 font-semibold text-[#002B6A] whitespace-nowrap truncate max-w-[200px]">
                         {t.name}
@@ -175,8 +302,8 @@ export default function TemplatesClient({ templates, role }: TemplatesClientProp
                         {t.subject}
                       </td>
                       {/* Body Preview */}
-                      <td className="px-4 py-3 text-[#475569] text-xs truncate max-w-[300px]" title={t.body}>
-                        {t.body}
+                      <td className="px-4 py-3 text-[#475569] text-xs truncate max-w-[300px]" title={stripHtml(t.body)}>
+                        {stripHtml(t.body)}
                       </td>
                       {/* Created At */}
                       <td className="px-4 py-3 text-[#475569] text-xs whitespace-nowrap">

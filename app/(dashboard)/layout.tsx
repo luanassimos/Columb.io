@@ -5,7 +5,6 @@ import WorkspaceSwitcher from '@/components/workspace-switcher';
 import NotificationCenter from '@/components/notification-center';
 import Sidebar from '@/components/sidebar';
 import { User } from 'lucide-react';
-import HeaderTestButton from '@/components/header-test-button';
 import { WorkspaceRole } from '@/lib/permissions';
 import { getEmailSendMode } from '@/lib/email-mode';
 
@@ -116,7 +115,7 @@ export default async function DashboardLayout({
         <div className="flex-1 flex flex-col h-full overflow-hidden bg-card border border-border rounded-2xl shadow-sm">
         {/* Header */}
         <header className="relative z-30 h-16 border-b border-border px-6 flex items-center justify-between bg-card/85 backdrop-blur-md shrink-0">
-          {/* Workspace selector & Test button */}
+          {/* Workspace selector */}
           <div className="flex items-center gap-3">
             <WorkspaceSwitcher
               workspaces={workspacesList}
@@ -124,7 +123,6 @@ export default async function DashboardLayout({
               activeWorkspaceName={displayedWorkspace.name}
               activeWorkspaceRole={activeWorkspaceRole}
             />
-            <HeaderTestButton emailSendMode={emailSendMode} />
           </div>
 
           {/* Right Header items (Notification icon & Profile menu) */}

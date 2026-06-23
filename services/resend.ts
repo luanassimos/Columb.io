@@ -137,7 +137,7 @@ export async function sendEmail({
           from: `"${smtp.from_name}" <${smtp.user_email}>`,
           to: effectiveRecipient,
           subject,
-          html: body.replace(/\n/g, '<br/>'),
+          html: /<[a-z][\s\S]*>/i.test(body) ? body : body.replace(/\n/g, '<br/>'),
         });
 
         console.log('[Email Service] Email sent successfully via SMTP:', info.messageId);
@@ -176,7 +176,7 @@ export async function sendEmail({
       from,
       to: effectiveRecipient,
       subject,
-      html: body.replace(/\n/g, '<br/>'), // simple text-to-html line breaks
+      html: /<[a-z][\s\S]*>/i.test(body) ? body : body.replace(/\n/g, '<br/>'),
     });
 
     if (error) {

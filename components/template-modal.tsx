@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createTemplate, updateTemplate } from '@/app/actions/template';
 import { Template } from '@/types';
+import { RichTextEditor, RichTextEditorRef } from '@/components/rich-text-editor';
 import { X, Plus, Loader2, Mail, Edit3, Type, FileText, Sparkles } from 'lucide-react';
 
 const TEMPLATE_PRESETS = [
@@ -47,7 +48,7 @@ export default function TemplateModal({ isOpen, onClose, templateToEdit }: Templ
 
   const firstInputRef = useRef<HTMLInputElement>(null);
   const subjectInputRef = useRef<HTMLInputElement>(null);
-  const bodyTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const richEditorRef = useRef<RichTextEditorRef>(null);
 
   // Focus first field when modal opens
   useEffect(() => {
@@ -94,13 +95,7 @@ export default function TemplateModal({ isOpen, onClose, templateToEdit }: Templ
     }
   };
 
-  const trackBodyCursor = () => {
-    setActiveField('body');
-    if (bodyTextareaRef.current) {
-      setSelectionStart(bodyTextareaRef.current.selectionStart || 0);
-      setSelectionEnd(bodyTextareaRef.current.selectionEnd || 0);
-    }
-  };
+
 
   const insertVariable = (variable: string) => {
     if (activeField === 'subject') {
@@ -121,30 +116,10 @@ export default function TemplateModal({ isOpen, onClose, templateToEdit }: Templ
         }
       }, 30);
     } else if (activeField === 'body') {
-      const start = selectionStart;
-      const end = selectionEnd;
-      const before = body.substring(0, start);
-      const after = body.substring(end);
-      const val = before + variable + after;
-      setBody(val);
-
-      setTimeout(() => {
-        if (bodyTextareaRef.current) {
-          bodyTextareaRef.current.focus();
-          const cursor = start + variable.length;
-          bodyTextareaRef.current.setSelectionRange(cursor, cursor);
-          setSelectionStart(cursor);
-          setSelectionEnd(cursor);
-        }
-      }, 30);
+      richEditorRef.current?.insertText(variable);
     } else {
-      // Default fallback: append to body
-      setBody(prev => prev + variable);
-      setTimeout(() => {
-        if (bodyTextareaRef.current) {
-          bodyTextareaRef.current.focus();
-        }
-      }, 30);
+      // Default fallback: insert into body
+      richEditorRef.current?.insertText(variable);
     }
   };
 
@@ -289,23 +264,14 @@ export default function TemplateModal({ isOpen, onClose, templateToEdit }: Templ
           </div>
 
           {/* Body */}
-          <div className="space-y-1.5">
+          <div className="space-y-1.5" onFocus={() => setActiveField('body')}>
             <label className="flex items-center gap-1.5 text-xs font-semibold text-[#002B6A]">
               <FileText className="h-3.5 w-3.5" /> Email Body <span className="text-rose-400">*</span>
             </label>
-            <textarea
-              ref={bodyTextareaRef}
-              rows={12}
+            <RichTextEditor
+              ref={richEditorRef}
               value={body}
-              onChange={e => {
-                setBody(e.target.value);
-                trackBodyCursor();
-              }}
-              onKeyUp={trackBodyCursor}
-              onSelect={trackBodyCursor}
-              onFocus={() => setActiveField('body')}
-              placeholder="Hi {{name}},&#10;&#10;I noticed that your team in {{city}} is growing..."
-              className="w-full px-3 py-2.5 rounded-lg border border-[#D8E0EA] bg-[#F7FAFF] text-sm text-[#061A40] placeholder-[#475569]/50 focus:outline-none focus:border-[#2D6BFF] focus:bg-white transition-all resize-none font-mono"
+              onChange={setBody}
             />
           </div>
 

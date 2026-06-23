@@ -94,3 +94,31 @@ export async function deleteTemplate(id: string) {
   revalidatePath('/templates');
   return { success: true };
 }
+
+export async function bulkDeleteTemplates(ids: string[]) {
+  const context = await getActiveWorkspaceContext();
+  if ('error' in context) return { error: context.error };
+  const permissionError = assertPermission(context.role, 'deleteTemplates');
+  if (permissionError) return permissionError;
+  const { supabase, workspaceId } = context;
+
+  if (ids.length === 0) return { success: true };
+
+  const { error } = await supabase
+    .from('templates')
+    .delete()
+    .in('id', ids)
+    .eq('workspace_id', workspaceId);
+
+  if (error) {
+    console.error('Error bulk deleting templates:', error);
+    if (error.code === '23503') {
+      return { error: 'Um ou mais modelos selecionados não puderam ser excluídos porque estão associados a campanhas. Por favor, remova as campanhas relacionadas antes de tentar novamente.' };
+    }
+    return { error: error.message };
+  }
+
+  revalidatePath('/templates');
+  return { success: true };
+}
+

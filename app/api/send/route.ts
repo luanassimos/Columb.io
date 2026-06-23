@@ -264,10 +264,12 @@ async function processQueue({
 
       // Filter contacts matching campaign tags
       const targetTags = campaign.target_tags || [];
-      const matchingContacts = (contacts || []).filter((contact) => {
-        const contactTags = contact.tags || [];
-        return targetTags.some((tag: string) => contactTags.includes(tag));
-      });
+      const matchingContacts = targetTags.length === 0
+        ? (contacts || [])
+        : (contacts || []).filter((contact) => {
+            const contactTags = contact.tags || [];
+            return targetTags.some((tag: string) => contactTags.includes(tag));
+          });
 
       console.log(`[Campaign: ${campaign.name}] Found ${matchingContacts.length} contacts matching tags: [${targetTags.join(', ')}]`);
 
@@ -306,18 +308,7 @@ async function processQueue({
         }
       }
 
-      // If immediate, mark campaign as completed
-      if (campaign.dispatch_type === 'immediate') {
-        const { error: completeErr } = await supabase
-          .from('campaigns')
-          .update({ status: 'completed' })
-          .eq('id', campaign.id);
-        if (completeErr) {
-          console.error(`[Cron Job] Error marking campaign ${campaign.name} as completed:`, completeErr);
-        } else {
-          console.log(`[Cron Job] Campaign "${campaign.name}" auto-completed.`);
-        }
-      }
+      // Campaign status update moved to end of processQueue
     } catch (campaignErr) {
       console.error(`[Cron Job] Exception processing campaign ${campaign.name}:`, campaignErr);
     }
@@ -521,6 +512,29 @@ async function processQueue({
         retriedCount++;
       } else {
         failedCount++;
+      }
+    }
+  }
+
+  // 6. Check and mark immediate campaigns as completed if all jobs are done
+  for (const campaign of activeCampaigns) {
+    if (campaign.dispatch_type === 'immediate') {
+      const { count, error: countErr } = await supabase
+        .from('email_jobs')
+        .select('*', { count: 'exact', head: true })
+        .eq('campaign_id', campaign.id)
+        .in('status', ['queued', 'processing']);
+      
+      if (!countErr && count === 0) {
+        const { error: completeErr } = await supabase
+          .from('campaigns')
+          .update({ status: 'completed' })
+          .eq('id', campaign.id);
+        if (completeErr) {
+          console.error(`[Cron Job] Error marking campaign ${campaign.name} as completed:`, completeErr);
+        } else {
+          console.log(`[Cron Job] Campaign "${campaign.name}" completed (all jobs finished).`);
+        }
       }
     }
   }

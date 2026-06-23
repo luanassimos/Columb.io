@@ -218,3 +218,52 @@ export async function deleteContact(id: string) {
   revalidatePath('/contacts');
   return { success: true };
 }
+
+export async function bulkDeleteContacts(ids: string[]) {
+  const context = await getActiveWorkspaceContext();
+  if ('error' in context) return { error: context.error };
+  const permissionError = assertPermission(context.role, 'deleteContacts');
+  if (permissionError) return permissionError;
+  const { supabase, workspaceId } = context;
+
+  if (ids.length === 0) return { success: true };
+
+  const { error } = await supabase
+    .from('contacts')
+    .delete()
+    .in('id', ids)
+    .eq('workspace_id', workspaceId);
+
+  if (error) {
+    console.error('Error bulk deleting contacts:', error);
+    return { error: error.message };
+  }
+
+  revalidatePath('/contacts');
+  return { success: true };
+}
+
+export async function bulkUpdateContactsStatus(ids: string[], status: ContactStatus) {
+  const context = await getActiveWorkspaceContext();
+  if ('error' in context) return { error: context.error };
+  const permissionError = assertPermission(context.role, 'manageContacts');
+  if (permissionError) return permissionError;
+  const { supabase, workspaceId } = context;
+
+  if (ids.length === 0) return { success: true };
+
+  const { error } = await supabase
+    .from('contacts')
+    .update({ status })
+    .in('id', ids)
+    .eq('workspace_id', workspaceId);
+
+  if (error) {
+    console.error('Error bulk updating contacts status:', error);
+    return { error: error.message };
+  }
+
+  revalidatePath('/contacts');
+  return { success: true };
+}
+

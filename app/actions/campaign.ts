@@ -96,6 +96,7 @@ export async function createCampaign(input: CreateCampaignInput) {
   }
 
   revalidatePath('/campaigns');
+  revalidatePath('/blasts');
   return { success: true, campaignId: campaign.id };
 }
 
@@ -157,6 +158,7 @@ export async function updateCampaign(input: UpdateCampaignInput) {
   }
 
   revalidatePath('/campaigns');
+  revalidatePath('/blasts');
   return { success: true };
 }
 
@@ -179,6 +181,7 @@ export async function deleteCampaign(id: string) {
   }
 
   revalidatePath('/campaigns');
+  revalidatePath('/blasts');
   return { success: true };
 }
 
@@ -203,6 +206,7 @@ export async function bulkUpdateCampaignStatus(ids: string[], status: CampaignSt
   }
 
   revalidatePath('/campaigns');
+  revalidatePath('/blasts');
   return { success: true };
 }
 
@@ -227,5 +231,6 @@ export async function bulkDeleteCampaigns(ids: string[]) {
   }
 
   revalidatePath('/campaigns');
+  revalidatePath('/blasts');
   return { success: true };
 }

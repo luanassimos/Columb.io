@@ -20,53 +20,7 @@ const STATUS_STYLES: Record<CampaignStatus, string> = {
   cancelled: 'bg-amber-50 text-amber-600',
 };
 
-const WEEKDAYS_SHORT = [
-  { key: 0, label: 'D' },
-  { key: 1, label: 'S' },
-  { key: 2, label: 'T' },
-  { key: 3, label: 'Q' },
-  { key: 4, label: 'Q' },
-  { key: 5, label: 'S' },
-  { key: 6, label: 'S' },
-];
-
-function RenderSchedule({ days, time, dispatchType }: { days: number[]; time: string; dispatchType?: 'scheduled' | 'immediate' }) {
-  if (dispatchType === 'immediate') {
-    return (
-      <span className="text-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100">
-        Disparo Imediato
-      </span>
-    );
-  }
-  if (!days || days.length === 0) return <span className="text-[#475569]/50 italic text-xs">No schedule</span>;
-  return (
-    <div className="flex items-center gap-3">
-      <div className="flex gap-0.5">
-        {WEEKDAYS_SHORT.map((day) => {
-          const isActive = days.includes(day.key);
-          return (
-            <span
-              key={day.key}
-              className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold border transition-all ${
-                isActive
-                  ? 'bg-[#2D6BFF]/10 text-[#2D6BFF] border-[#2D6BFF]/20 font-extrabold shadow-sm'
-                  : 'bg-slate-50 text-slate-300 border-slate-100'
-              }`}
-              title={isActive ? 'Active' : 'Inactive'}
-            >
-              {day.label}
-            </span>
-          );
-        })}
-      </div>
-      <span className="text-xs font-semibold text-[#002B6A] bg-[#EAF2FF] px-2 py-0.5 rounded-md border border-[#D8E0EA]">
-        {time}
-      </span>
-    </div>
-  );
-}
-
-interface CampaignsClientProps {
+interface BlastsClientProps {
   campaigns: Campaign[];
   templates: Template[];
   availableTags: string[];
@@ -75,17 +29,17 @@ interface CampaignsClientProps {
   role: WorkspaceRole;
 }
 
-export default function CampaignsClient({
+export default function BlastsClient({
   campaigns,
   templates,
   availableTags,
   smtpSettingsList,
   emailJobs = [],
   role,
-}: CampaignsClientProps) {
+}: BlastsClientProps) {
   const router = useRouter();
-  const canCreateCampaign = role !== 'viewer';
-  const canManageCampaignStatuses = canManageCampaigns(role);
+  const canCreateBlast = role !== 'viewer';
+  const canManageBlastStatuses = canManageCampaigns(role);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [campaignToEdit, setCampaignToEdit] = useState<Campaign | null>(null);
 
@@ -106,19 +60,19 @@ export default function CampaignsClient({
   const [bulkError, setBulkError] = useState<string | null>(null);
 
   // Tabs navigation
-  const [activeTab, setActiveTab] = useState<'campaigns' | 'sent_logs'>('campaigns');
-  const [campaignFilter, setCampaignFilter] = useState<'all' | 'active' | 'paused' | 'completed'>('all');
+  const [activeTab, setActiveTab] = useState<'blasts' | 'sent_logs'>('blasts');
+  const [blastFilter, setBlastFilter] = useState<'all' | 'active' | 'paused' | 'completed'>('all');
   const [logsSearch, setLogsSearch] = useState('');
 
   // Trigger campaign states
   const [triggerCampaignId, setTriggerCampaignId] = useState<string | null>(null);
   const [isTriggerModalOpen, setIsTriggerModalOpen] = useState(false);
 
-  const handleTriggerCampaign = async (campaign: Campaign) => {
+  const handleTriggerBlast = async (campaign: Campaign) => {
     if (campaign.status === 'draft' || campaign.status === 'cancelled') {
       const updateResult = await bulkUpdateCampaignStatus([campaign.id], 'running');
       if (updateResult?.error) {
-        alert('Erro ao ativar campanha: ' + updateResult.error);
+        alert('Erro ao ativar disparo: ' + updateResult.error);
         return;
       }
     }
@@ -127,7 +81,7 @@ export default function CampaignsClient({
   };
 
   const handleSelectRow = (id: string) => {
-    if (!canManageCampaignStatuses) return;
+    if (!canManageBlastStatuses) return;
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) {
@@ -140,7 +94,7 @@ export default function CampaignsClient({
   };
 
   const handleSelectAll = (filteredRows: Campaign[]) => {
-    if (!canManageCampaignStatuses) return;
+    if (!canManageBlastStatuses) return;
     setSelectedIds((prev) => {
       const next = new Set<string>();
       const allSelected = filteredRows.length > 0 && filteredRows.every(c => prev.has(c.id));
@@ -152,7 +106,7 @@ export default function CampaignsClient({
   };
 
   const handleBulkStatusChange = async (status: CampaignStatus) => {
-    if (!canManageCampaignStatuses) return;
+    if (!canManageBlastStatuses) return;
     setIsBulkProcessing(true);
     setBulkError(null);
     setIsActionsOpen(false);
@@ -170,8 +124,8 @@ export default function CampaignsClient({
   };
 
   const handleBulkDelete = async () => {
-    if (!canManageCampaignStatuses) return;
-    if (!window.confirm(`Are you sure you want to delete ${selectedIds.size} campaigns?`)) {
+    if (!canManageBlastStatuses) return;
+    if (!window.confirm(`Tem certeza que deseja excluir ${selectedIds.size} disparos?`)) {
       return;
     }
     
@@ -192,7 +146,6 @@ export default function CampaignsClient({
   };
 
   const getTemplateName = (c: Campaign) => {
-    // Check embedded template or lookup in templates array
     const found = c.template || c.templates || templates.find(t => t.id === c.template_id);
     return found?.name || '—';
   };
@@ -220,11 +173,11 @@ export default function CampaignsClient({
   const filtered = campaigns
     .filter(c => {
       // Filter by active/paused/completed groups
-      if (campaignFilter === 'active') {
+      if (blastFilter === 'active') {
         if (c.status !== 'running' && c.status !== 'queued') return false;
-      } else if (campaignFilter === 'paused') {
+      } else if (blastFilter === 'paused') {
         if (c.status !== 'cancelled' && c.status !== 'draft') return false;
-      } else if (campaignFilter === 'completed') {
+      } else if (blastFilter === 'completed') {
         if (c.status !== 'completed') return false;
       }
 
@@ -238,12 +191,11 @@ export default function CampaignsClient({
       );
     })
     .sort((a, b) => {
-      // If using the default sort (created_at desc), prioritize active statuses first
       if (sortKey === 'created_at' && sortDir === 'desc') {
         const prioA = getStatusPriority(a.status);
         const prioB = getStatusPriority(b.status);
         if (prioA !== prioB) {
-          return prioA - prioB; // Lower priority number (active) goes on top
+          return prioA - prioB;
         }
       }
 
@@ -281,9 +233,9 @@ export default function CampaignsClient({
     </button>
   );
 
-  const canEditCampaign = (campaign: Campaign) => {
+  const canEditBlast = (campaign: Campaign) => {
     if (campaign.status === 'completed') return false;
-    return canManageCampaignStatuses || (role === 'member' && campaign.status === 'draft');
+    return canManageBlastStatuses || (role === 'member' && campaign.status === 'draft');
   };
 
   return (
@@ -291,12 +243,12 @@ export default function CampaignsClient({
       {/* Header */}
       <div className="flex justify-between items-start">
         <div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-[#002B6A]">Campaigns & Outreach</h1>
+          <h1 className="text-3xl font-extrabold tracking-tight text-[#002B6A]">Email Blasts</h1>
           <p className="text-sm text-[#475569] mt-1">
-            Build drip outreach sequences, launch cold mail campaigns, and oversee automation lists.
+            Configure e dispare e-mails em massa imediatos para os seus segmentos de leads.
           </p>
         </div>
-        {canCreateCampaign && (
+        {canCreateBlast && (
           <button
             type="button"
             onClick={() => {
@@ -306,7 +258,7 @@ export default function CampaignsClient({
             className="flex items-center gap-2 px-4 py-2 bg-[#2D6BFF] hover:bg-[#1b58ec] text-white rounded-lg text-sm font-semibold transition-all shadow-sm shadow-[#2D6BFF]/30 cursor-pointer"
           >
             <Plus className="h-4 w-4" />
-            Create Campaign
+            Criar Blast
           </button>
         )}
       </div>
@@ -315,14 +267,14 @@ export default function CampaignsClient({
       <div className="flex border-b border-[#D8E0EA] gap-6">
         <button
           type="button"
-          onClick={() => setActiveTab('campaigns')}
+          onClick={() => setActiveTab('blasts')}
           className={`pb-3 text-sm font-bold border-b-2 transition-all cursor-pointer ${
-            activeTab === 'campaigns'
+            activeTab === 'blasts'
               ? 'border-[#2D6BFF] text-[#2D6BFF]'
               : 'border-transparent text-[#475569]/70 hover:text-[#002B6A]'
           }`}
         >
-          Campanhas
+          Disparos Rápidos
         </button>
         <button
           type="button"
@@ -337,7 +289,7 @@ export default function CampaignsClient({
         </button>
       </div>
 
-      {activeTab === 'campaigns' ? (
+      {activeTab === 'blasts' ? (
         <>
           {campaigns.length === 0 ? (
             /* Empty State */
@@ -346,12 +298,12 @@ export default function CampaignsClient({
                 <Send className="h-6 w-6" />
               </div>
               <div className="space-y-1">
-                <h3 className="text-base font-bold text-[#002B6A]">No campaigns found</h3>
+                <h3 className="text-base font-bold text-[#002B6A]">Nenhum disparo em massa encontrado</h3>
                 <p className="text-xs text-[#475569] max-w-[280px] mx-auto leading-normal">
-                  Your campaign list is empty. Click <strong>Create Campaign</strong> to configure your first outreach list.
+                  Sua lista de disparos está vazia. Clique em <strong>Criar Blast</strong> para enviar sua primeira mensagem em massa.
                 </p>
               </div>
-              {canCreateCampaign && (
+              {canCreateBlast && (
                 <button
                   onClick={() => {
                     setCampaignToEdit(null);
@@ -359,7 +311,7 @@ export default function CampaignsClient({
                   }}
                   className="inline-flex items-center gap-2 px-4 py-2 bg-[#2D6BFF] hover:bg-[#1b58ec] text-white rounded-lg text-sm font-semibold transition-all cursor-pointer"
                 >
-                  <Plus className="h-4 w-4" /> Create First Campaign
+                  <Plus className="h-4 w-4" /> Criar Primeiro Blast
                 </button>
               )}
             </div>
@@ -371,15 +323,15 @@ export default function CampaignsClient({
                 {[
                   { key: 'all', label: 'Todas' },
                   { key: 'active', label: 'Ativas' },
-                  { key: 'paused', label: 'Pausadas/Rascunho' },
+                  { key: 'paused', label: 'Rascunhos' },
                   { key: 'completed', label: 'Concluídas' },
                 ].map((f) => (
                   <button
                     key={f.key}
                     type="button"
-                    onClick={() => setCampaignFilter(f.key as any)}
+                    onClick={() => setBlastFilter(f.key as any)}
                     className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                      campaignFilter === f.key
+                      blastFilter === f.key
                         ? 'bg-white text-[#002B6A] shadow-sm font-bold'
                         : 'text-[#475569]/80 hover:text-[#002B6A]'
                     }`}
@@ -394,7 +346,7 @@ export default function CampaignsClient({
                 <div className="px-4 py-3 border-b border-[#D8E0EA] flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3 flex-1 min-w-[280px]">
                     {/* Actions Dropdown Button */}
-                    {canManageCampaignStatuses && (
+                    {canManageBlastStatuses && (
                       <div className="relative">
                         <button
                           type="button"
@@ -405,7 +357,7 @@ export default function CampaignsClient({
                           {isBulkProcessing ? (
                             <Loader2 className="h-3.5 w-3.5 animate-spin text-[#002B6A]" />
                           ) : (
-                            'Actions'
+                            'Ações'
                           )}
                           <ChevronDown className="h-3 w-3" />
                         </button>
@@ -418,14 +370,14 @@ export default function CampaignsClient({
                                 onClick={() => handleBulkStatusChange('running')}
                                 className="w-full text-left px-3 py-2 text-xs text-[#061A40] hover:bg-[#EAF2FF] transition-colors cursor-pointer"
                               >
-                                Activate (Set Running)
+                                Ativar (Status Running)
                               </button>
                               <button
                                 type="button"
                                 onClick={() => handleBulkStatusChange('cancelled')}
                                 className="w-full text-left px-3 py-2 text-xs text-[#061A40] hover:bg-[#EAF2FF] transition-colors cursor-pointer"
                               >
-                                Pause (Set Cancelled)
+                                Pausar (Status Cancelled)
                               </button>
                               <hr className="border-[#D8E0EA] my-1" />
                               <button
@@ -433,7 +385,7 @@ export default function CampaignsClient({
                                 onClick={handleBulkDelete}
                                 className="w-full text-left px-3 py-2 text-xs text-rose-600 hover:bg-rose-50 transition-colors font-semibold cursor-pointer"
                               >
-                                Delete Selected
+                                Excluir Selecionados
                               </button>
                             </div>
                           </>
@@ -445,14 +397,14 @@ export default function CampaignsClient({
                       type="text"
                       value={search}
                       onChange={e => setSearch(e.target.value)}
-                      placeholder="Search by campaign name or template…"
+                      placeholder="Buscar por nome do disparo ou modelo…"
                       className="w-full max-w-sm px-3 py-1.5 rounded-lg border border-[#D8E0EA] bg-[#F7FAFF] text-sm text-[#061A40] placeholder-[#475569]/50 focus:outline-none focus:border-[#2D6BFF] transition-all"
                     />
                   </div>
                   
                   {selectedIds.size > 0 && (
                     <span className="text-xs text-[#475569] font-semibold bg-[#EAF2FF] px-2.5 py-1 rounded-full border border-[#2D6BFF]/20">
-                      {selectedIds.size} selected
+                      {selectedIds.size} selecionados
                     </span>
                   )}
                 </div>
@@ -467,29 +419,29 @@ export default function CampaignsClient({
                   <table className="w-full text-sm">
                     <thead className="bg-[#F7FAFF] border-b border-[#D8E0EA]">
                       <tr>
-                        {canManageCampaignStatuses && (
+                        {canManageBlastStatuses && (
                           <th className="px-4 py-3 text-left w-10">
                             <input
                               type="checkbox"
                               checked={filtered.length > 0 && filtered.every(c => selectedIds.has(c.id))}
                               onChange={() => handleSelectAll(filtered)}
                               className="rounded border-[#D8E0EA] text-[#2D6BFF] focus:ring-[#2D6BFF] h-4 w-4 cursor-pointer"
-                              title="Select all"
+                              title="Selecionar todos"
                             />
                           </th>
                         )}
                         <th className="px-4 py-3 text-left w-40"><ThBtn col="status" label="Status" /></th>
-                        <th className="px-4 py-3 text-left w-1/3"><ThBtn col="name" label="Campaign Name" /></th>
-                        <th className="px-4 py-3 text-left">Email Template</th>
-                        <th className="px-4 py-3 text-left w-64"><ThBtn col="created_at" label="Schedule" /></th>
-                        <th className="px-4 py-3 text-right w-28 text-xs font-semibold text-[#475569] uppercase tracking-wide">Actions</th>
+                        <th className="px-4 py-3 text-left w-1/3"><ThBtn col="name" label="Nome do Disparo" /></th>
+                        <th className="px-4 py-3 text-left">Modelo Utilizado</th>
+                        <th className="px-4 py-3 text-left w-64">Tags Alvo (Público)</th>
+                        <th className="px-4 py-3 text-right w-28 text-xs font-semibold text-[#475569] uppercase tracking-wide">Ações</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#D8E0EA]">
                       {filtered.length === 0 ? (
                         <tr>
-                          <td colSpan={canManageCampaignStatuses ? 6 : 5} className="px-4 py-12 text-center text-sm text-[#475569]">
-                            Nenhuma campanha encontrada com esse filtro ou busca.
+                          <td colSpan={canManageBlastStatuses ? 6 : 5} className="px-4 py-12 text-center text-sm text-[#475569]">
+                            Nenhum disparo em massa encontrado com esse filtro ou busca.
                           </td>
                         </tr>
                       ) : (
@@ -500,7 +452,7 @@ export default function CampaignsClient({
                               selectedIds.has(c.id) ? 'bg-[#F7FAFF]/80' : ''
                             }`}
                           >
-                            {canManageCampaignStatuses && (
+                            {canManageBlastStatuses && (
                               <td className="px-4 py-3 text-left w-10">
                                 <input
                                   type="checkbox"
@@ -524,25 +476,35 @@ export default function CampaignsClient({
                             <td className="px-4 py-3 text-[#061A40] truncate max-w-[200px]">
                               {getTemplateName(c)}
                             </td>
-                            {/* Schedule */}
-                            <td className="px-4 py-3 whitespace-nowrap">
-                              <RenderSchedule days={c.schedule_days} time={c.schedule_time} dispatchType={c.dispatch_type} />
+                            {/* Tags badges */}
+                            <td className="px-4 py-3">
+                              {c.target_tags && c.target_tags.length > 0 ? (
+                                <div className="flex flex-wrap gap-1">
+                                  {c.target_tags.map(tag => (
+                                    <span key={tag} className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-[#EAF2FF] text-[#2D6BFF] border border-[#2D6BFF]/10">
+                                      {tag}
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span className="text-[#475569]/50 italic text-xs">Todos os contatos</span>
+                              )}
                             </td>
                             {/* Actions */}
                             <td className="px-4 py-3 text-right whitespace-nowrap">
                               <div className="flex justify-end items-center gap-2">
-                                {canManageCampaignStatuses && c.status !== 'completed' && (
+                                {canManageBlastStatuses && c.status !== 'completed' && (
                                   <button
                                     type="button"
-                                    onClick={() => handleTriggerCampaign(c)}
+                                    onClick={() => handleTriggerBlast(c)}
                                     className="p-1 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded transition-all flex items-center gap-1 text-xs font-semibold cursor-pointer"
-                                    title="Disparar Campanha"
+                                    title="Disparar Agora"
                                   >
                                     <Play className="h-3.5 w-3.5 fill-current" />
                                     <span>Disparar</span>
                                   </button>
                                 )}
-                                {canEditCampaign(c) && (
+                                {canEditBlast(c) && (
                                   <button
                                     type="button"
                                     onClick={() => {
@@ -550,17 +512,17 @@ export default function CampaignsClient({
                                       setIsModalOpen(true);
                                     }}
                                     className="p-1 text-slate-400 hover:text-[#2D6BFF] hover:bg-[#EAF2FF] rounded transition-all cursor-pointer"
-                                    title="Edit Campaign"
+                                    title="Editar Blast"
                                   >
                                     <Edit2 className="h-4 w-4" />
                                   </button>
                                 )}
-                                {canManageCampaignStatuses && (
+                                {canManageBlastStatuses && (
                                   <button
                                     type="button"
                                     onClick={() => setCampaignToDelete(c)}
                                     className="p-1 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded transition-all cursor-pointer"
-                                    title="Delete Campaign"
+                                    title="Excluir Blast"
                                   >
                                     <Trash2 className="h-4 w-4" />
                                   </button>
@@ -576,7 +538,7 @@ export default function CampaignsClient({
 
                 {/* Footer */}
                 <div className="px-4 py-3 border-t border-[#D8E0EA] text-xs text-[#475569]">
-                  {filtered.length} of {campaigns.length} campaigns
+                  {filtered.length} de {campaigns.length} disparos
                 </div>
               </div>
             </div>
@@ -602,7 +564,7 @@ export default function CampaignsClient({
                 <tr>
                   <th className="px-4 py-3 text-left w-28">Status</th>
                   <th className="px-4 py-3 text-left">Destinatário</th>
-                  <th className="px-4 py-3 text-left">Campanha</th>
+                  <th className="px-4 py-3 text-left">Disparo</th>
                   <th className="px-4 py-3 text-left">Modelo Utilizado</th>
                   <th className="px-4 py-3 text-left w-56">Data de Envio</th>
                 </tr>
@@ -660,7 +622,7 @@ export default function CampaignsClient({
       )}
 
       {/* Slide-in Modal */}
-      {canCreateCampaign && (
+      {canCreateBlast && (
         <CampaignModal
           isOpen={isModalOpen}
           onClose={() => {
@@ -671,8 +633,8 @@ export default function CampaignsClient({
           campaignToEdit={campaignToEdit}
           availableTags={availableTags}
           smtpSettingsList={smtpSettingsList}
-          canManageStatus={canManageCampaignStatuses}
-          mode="campaign"
+          canManageStatus={canManageBlastStatuses}
+          mode="blast"
         />
       )}
 
@@ -688,9 +650,9 @@ export default function CampaignsClient({
           {/* Modal Container */}
           <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-white rounded-2xl border border-[#D8E0EA] p-6 shadow-2xl z-[301] space-y-4">
             <div>
-              <h3 className="text-lg font-bold text-[#002B6A]">Delete Campaign</h3>
+              <h3 className="text-lg font-bold text-[#002B6A]">Excluir Disparo</h3>
               <p className="text-sm text-[#475569] mt-1">
-                Are you sure you want to delete campaign <strong className="text-[#061A40]">{campaignToDelete.name}</strong>? This action cannot be undone.
+                Tem certeza que deseja excluir o disparo <strong className="text-[#061A40]">{campaignToDelete.name}</strong>? Esta ação não pode ser desfeita.
               </p>
             </div>
 
@@ -707,7 +669,7 @@ export default function CampaignsClient({
                 onClick={() => setCampaignToDelete(null)}
                 className="flex-1 py-2.5 rounded-lg text-sm font-semibold text-[#475569] bg-[#F7FAFF] hover:bg-[#EAF2FF] border border-[#D8E0EA] transition-all cursor-pointer"
               >
-                Cancel
+                Cancelar
               </button>
               <button
                 type="button"
@@ -727,9 +689,9 @@ export default function CampaignsClient({
                 className="flex-1 py-2.5 rounded-lg text-sm font-semibold text-white bg-rose-500 hover:bg-rose-600 disabled:opacity-60 transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
                 {isDeleting ? (
-                  <><Loader2 className="h-4 w-4 animate-spin" /> Deleting…</>
+                  <><Loader2 className="h-4 w-4 animate-spin" /> Excluindo…</>
                 ) : (
-                  <>Delete Campaign</>
+                  <>Excluir Disparo</>
                 )}
               </button>
             </div>
