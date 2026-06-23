@@ -102,20 +102,84 @@ export const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>
     }
   };
 
+  const compressImage = (file: File): Promise<File> => {
+    return new Promise((resolve) => {
+      if (!file.type.startsWith('image/')) {
+        resolve(file);
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target?.result as string;
+        img.onload = () => {
+          const MAX_WIDTH = 800;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > MAX_WIDTH) {
+            height = Math.round((height * MAX_WIDTH) / width);
+            width = MAX_WIDTH;
+          }
+
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            resolve(file);
+            return;
+          }
+
+          ctx.drawImage(img, 0, 0, width, height);
+
+          const format = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+          const quality = 0.85;
+
+          canvas.toBlob(
+            (blob) => {
+              if (blob) {
+                const compressedFile = new File([blob], file.name.replace(/\.[^/.]+$/, "") + (format === 'image/png' ? '.png' : '.jpg'), {
+                  type: format,
+                  lastModified: Date.now(),
+                });
+                resolve(compressedFile);
+              } else {
+                resolve(file);
+              }
+            },
+            format,
+            quality
+          );
+        };
+        img.onerror = () => {
+          resolve(file);
+        };
+      };
+      reader.onerror = () => {
+        resolve(file);
+      };
+    });
+  };
+
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setIsUploading(true);
     try {
+      const compressedFile = await compressImage(file);
       const supabase = createBrowserClient();
-      const fileExt = file.name.split('.').pop();
+      const fileExt = compressedFile.name.split('.').pop();
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
       const filePath = `images/${fileName}`;
 
       const { error: uploadError } = await supabase.storage
         .from('template-assets')
-        .upload(filePath, file);
+        .upload(filePath, compressedFile);
 
       if (uploadError) {
         throw uploadError;

@@ -58,6 +58,8 @@ export default function CampaignModal({
 
   const [alreadySentCount, setAlreadySentCount] = useState<number>(0);
   const [checkingOverlap, setCheckingOverlap] = useState<boolean>(false);
+  const [targetAudienceCount, setTargetAudienceCount] = useState<number>(0);
+  const [countingAudience, setCountingAudience] = useState<boolean>(false);
 
   // Sync state with campaignToEdit when modal opens or template changes
   useEffect(() => {
@@ -87,15 +89,17 @@ export default function CampaignModal({
     }
   }, [isOpen, campaignToEdit, templates, smtpSettingsList, canManageStatus, mode]);
 
-  // Check if template has already been sent to contacts matching the target tags
+  // Check if template has already been sent to contacts matching the target tags, and count target audience
   useEffect(() => {
-    if (!isOpen || !templateId || targetTags.length === 0) {
+    if (!isOpen || targetTags.length === 0) {
       setAlreadySentCount(0);
+      setTargetAudienceCount(0);
       return;
     }
 
-    const checkOverlap = async () => {
+    const checkAudienceAndOverlap = async () => {
       setCheckingOverlap(true);
+      setCountingAudience(true);
       try {
         const { createBrowserClient } = await import('@/lib/supabase/client');
         const supabase = createBrowserClient();
@@ -107,6 +111,7 @@ export default function CampaignModal({
 
         if (contactsErr || !contacts) {
           setAlreadySentCount(0);
+          setTargetAudienceCount(0);
           return;
         }
 
@@ -117,7 +122,9 @@ export default function CampaignModal({
           })
           .map(c => c.id);
 
-        if (matchingContactIds.length === 0) {
+        setTargetAudienceCount(matchingContactIds.length);
+
+        if (matchingContactIds.length === 0 || !templateId) {
           setAlreadySentCount(0);
           return;
         }
@@ -137,16 +144,18 @@ export default function CampaignModal({
 
         setAlreadySentCount(count || 0);
       } catch (err) {
-        console.error('Error checking template overlap:', err);
+        console.error('Error checking audience and template overlap:', err);
         setAlreadySentCount(0);
+        setTargetAudienceCount(0);
       } finally {
         setCheckingOverlap(false);
+        setCountingAudience(false);
       }
     };
 
     // Debounce checks slightly to avoid excessive queries during tag selection
     const delayDebounce = setTimeout(() => {
-      checkOverlap();
+      checkAudienceAndOverlap();
     }, 300);
 
     return () => clearTimeout(delayDebounce);
@@ -386,7 +395,34 @@ export default function CampaignModal({
                 })}
               </div>
             )}
+
+            {/* Dynamic Audience Counter */}
+            {targetTags.length > 0 && (
+              <div className="text-xs font-semibold mt-1.5 flex items-center gap-1 text-[#475569]">
+                <span>🎯 Público estimado:</span>
+                {countingAudience ? (
+                  <Loader2 className="h-3 w-3 animate-spin text-[#2D6BFF]" />
+                ) : targetAudienceCount === 0 ? (
+                  <span className="text-rose-500 font-bold">0 contatos (Nenhum lead com essas tags neste workspace!)</span>
+                ) : (
+                  <span className="text-[#2D6BFF] font-bold">{targetAudienceCount} contato{targetAudienceCount > 1 ? 's' : ''}</span>
+                )}
+              </div>
+            )}
           </div>
+
+          {/* Warning if audience is empty */}
+          {targetTags.length > 0 && !countingAudience && targetAudienceCount === 0 && (
+            <div className="p-3 bg-rose-50 border border-rose-200 text-xs rounded-xl flex items-start gap-2.5">
+              <span className="text-sm">⚠️</span>
+              <div>
+                <p className="font-bold text-rose-950">Público Vazio</p>
+                <p className="font-medium text-rose-800 mt-0.5 leading-normal">
+                  Nenhum lead possui a combinação de tags selecionada. Se você criar ou rodar {mode === 'blast' ? 'este disparo' : 'esta campanha'}, ela não enviará nenhum e-mail.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Warning if already sent to any target contact */}
           {alreadySentCount > 0 && (
