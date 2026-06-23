@@ -683,9 +683,14 @@ export default function InboxClient({
                           </span>
                         </div>
                         <hr className="border-[#D8E0EA]/50" />
-                        <div className="text-xs text-[#061A40] whitespace-pre-wrap leading-relaxed font-medium">
-                          {compiled.body}
-                        </div>
+                        <div 
+                          className="text-xs text-[#061A40] leading-relaxed font-medium"
+                          dangerouslySetInnerHTML={{
+                            __html: /<[a-z][\s\S]*>/i.test(compiled.body)
+                              ? compiled.body
+                              : compiled.body.replace(/\n/g, '<br/>')
+                          }}
+                        />
                       </div>
                     </div>
                   );

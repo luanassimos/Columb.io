@@ -16,6 +16,11 @@ function formatDate(iso?: string | null) {
   return new Date(iso).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
+function stripHtml(html: string) {
+  if (!html) return '';
+  return html.replace(/<[^>]*>/g, '');
+}
+
 interface TemplatesClientProps {
   templates: Template[];
   role: WorkspaceRole;
@@ -297,8 +302,8 @@ export default function TemplatesClient({ templates, role }: TemplatesClientProp
                         {t.subject}
                       </td>
                       {/* Body Preview */}
-                      <td className="px-4 py-3 text-[#475569] text-xs truncate max-w-[300px]" title={t.body}>
-                        {t.body}
+                      <td className="px-4 py-3 text-[#475569] text-xs truncate max-w-[300px]" title={stripHtml(t.body)}>
+                        {stripHtml(t.body)}
                       </td>
                       {/* Created At */}
                       <td className="px-4 py-3 text-[#475569] text-xs whitespace-nowrap">
