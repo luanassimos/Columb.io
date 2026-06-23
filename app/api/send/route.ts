@@ -264,10 +264,12 @@ async function processQueue({
 
       // Filter contacts matching campaign tags
       const targetTags = campaign.target_tags || [];
-      const matchingContacts = (contacts || []).filter((contact) => {
-        const contactTags = contact.tags || [];
-        return targetTags.some((tag: string) => contactTags.includes(tag));
-      });
+      const matchingContacts = targetTags.length === 0
+        ? (contacts || [])
+        : (contacts || []).filter((contact) => {
+            const contactTags = contact.tags || [];
+            return targetTags.some((tag: string) => contactTags.includes(tag));
+          });
 
       console.log(`[Campaign: ${campaign.name}] Found ${matchingContacts.length} contacts matching tags: [${targetTags.join(', ')}]`);
 
