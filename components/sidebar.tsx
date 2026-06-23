@@ -34,7 +34,6 @@ export default function Sidebar({ profileName, userEmail }: SidebarProps) {
     { label: 'Templates', icon: Mail, href: '/templates' },
     { label: 'Campaigns', icon: Calendar, href: '/campaigns' },
     { label: 'Email Blasts', icon: Send, href: '/blasts' },
-    { label: 'Inbox', icon: Inbox, href: '/inbox' },
   ];
 
   const bottomNavItems = [
