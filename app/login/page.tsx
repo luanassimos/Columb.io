@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState, startTransition } from 'react';
+import Image from 'next/image';
 import { signIn, signUp } from '@/app/actions/auth';
-import { Mail, Lock, User, Briefcase, MailPlus, Eye, EyeOff, Globe } from 'lucide-react';
+import { Mail, Lock, User, Briefcase, Eye, EyeOff, Globe } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 export default function LoginPage() {
@@ -55,7 +56,13 @@ export default function LoginPage() {
       <div className="w-full max-w-md bg-white border border-[#D8E0EA] p-8 rounded-2xl shadow-lg relative z-10">
         <div className="flex flex-col items-center mb-8">
           <div className="flex items-center gap-2.5 mb-2">
-            <img src="/columb_symbol_navy.svg" alt="Columb Logo" className="h-10 w-10 object-contain" />
+            <Image
+              src="/columb_symbol_navy.svg"
+              alt="Columb Logo"
+              width={40}
+              height={40}
+              className="h-10 w-10 object-contain"
+            />
             <span className="text-2xl font-bold tracking-tight text-[#002B6A]">
               Columb
             </span>

@@ -24,6 +24,8 @@ export default async function DashboardPage() {
   let totalTemplates = 0;
   let sentEmails = 0;
   let repliedEmails = 0;
+  let mockedEmails = 0;
+  let dryRunEmails = 0;
 
   // A. Receber: Fetch Total Contacts
   if (supabase && workspaceId) try {
@@ -70,12 +72,13 @@ export default async function DashboardPage() {
     console.error('Exception fetching templates count in dashboard:', err);
   }
 
-  // D. Enviar ou Escalar: Fetch sent and replied email jobs
+  // D. Enviar ou Escalar: Fetch live sent email jobs only
   if (supabase && workspaceId) try {
     let query = supabase
       .from('email_jobs')
       .select('*', { count: 'exact', head: true })
-      .in('status', ['sent', 'opened', 'replied']);
+      .eq('status', 'sent')
+      .eq('send_mode', 'live');
     query = query.eq('workspace_id', workspaceId);
     const { count, error } = await query;
     if (error) {
@@ -89,7 +92,7 @@ export default async function DashboardPage() {
 
   if (supabase && workspaceId) try {
     let query = supabase
-      .from('email_jobs')
+      .from('contacts')
       .select('*', { count: 'exact', head: true })
       .eq('status', 'replied');
     query = query.eq('workspace_id', workspaceId);
@@ -101,6 +104,38 @@ export default async function DashboardPage() {
     }
   } catch (err) {
     console.error('Exception fetching replied emails count in dashboard:', err);
+  }
+
+  if (supabase && workspaceId) try {
+    let query = supabase
+      .from('email_jobs')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'mocked');
+    query = query.eq('workspace_id', workspaceId);
+    const { count, error } = await query;
+    if (error) {
+      console.error('Error fetching mocked email jobs count in dashboard:', error.message || error);
+    } else {
+      mockedEmails = count || 0;
+    }
+  } catch (err) {
+    console.error('Exception fetching mocked email jobs count in dashboard:', err);
+  }
+
+  if (supabase && workspaceId) try {
+    let query = supabase
+      .from('email_jobs')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'dry_run');
+    query = query.eq('workspace_id', workspaceId);
+    const { count, error } = await query;
+    if (error) {
+      console.error('Error fetching dry-run email jobs count in dashboard:', error.message || error);
+    } else {
+      dryRunEmails = count || 0;
+    }
+  } catch (err) {
+    console.error('Exception fetching dry-run email jobs count in dashboard:', err);
   }
 
   const steps = [
@@ -136,7 +171,7 @@ export default async function DashboardPage() {
       title: 'Enviar ou Escalar',
       subtitle: 'Outreach & Ações',
       value: (sentEmails || 0) + (repliedEmails || 0),
-      description: 'Mensagens enviadas ou transferidas para o atendimento comercial.',
+      description: `Envios reais e respostas comerciais. Simulacoes separadas: ${mockedEmails} mock, ${dryRunEmails} dry run.`,
       icon: Send,
       color: 'from-amber-500/10 to-amber-500/5 border-amber-500/20 text-amber-600',
     },

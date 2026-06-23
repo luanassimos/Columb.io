@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import Image from 'next/image';
 import { Check, X, Send } from 'lucide-react';
 import type { EmailSendMode } from '@/lib/email-mode';
 
@@ -12,14 +13,14 @@ interface SendSuccessModalProps {
   campaignId?: string;
 }
 
-export default function SendSuccessModal({ isOpen, onClose, emailSendMode = 'mock', campaignId }: SendSuccessModalProps) {
-  const images = [
-    '/fly01.webp',
-    '/fly02.webp',
-    '/fly03.webp',
-    '/fly02.webp'
-  ];
+const FLY_FRAMES = [
+  '/fly01.webp',
+  '/fly02.webp',
+  '/fly03.webp',
+  '/fly02.webp',
+];
 
+export default function SendSuccessModal({ isOpen, onClose, emailSendMode = 'mock', campaignId }: SendSuccessModalProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [animationPhase, setAnimationPhase] = useState<'idle' | 'takeoff' | 'sent'>('idle');
   const [mounted, setMounted] = useState(false);
@@ -29,8 +30,13 @@ export default function SendSuccessModal({ isOpen, onClose, emailSendMode = 'moc
   const [result, setResult] = useState<{
     emailSendMode?: EmailSendMode;
     newJobsQueued?: number;
+    duplicateJobsSkipped?: number;
     sentCount?: number;
+    mockedCount?: number;
+    dryRunCount?: number;
     failedCount?: number;
+    retriedCount?: number;
+    skippedCount?: number;
     message?: string;
   } | null>(null);
   const visibleMode = result?.emailSendMode || emailSendMode;
@@ -46,7 +52,7 @@ export default function SendSuccessModal({ isOpen, onClose, emailSendMode = 'moc
   useEffect(() => {
     if (!isOpen) return;
     const interval = setInterval(() => {
-      setCurrentIndex((prevIndex) => (prevIndex + 1) % images.length);
+      setCurrentIndex((prevIndex) => (prevIndex + 1) % FLY_FRAMES.length);
     }, 80);
     return () => clearInterval(interval);
   }, [isOpen]);
@@ -198,9 +204,11 @@ export default function SendSuccessModal({ isOpen, onClose, emailSendMode = 'moc
                 animationPhase === 'takeoff' ? 'animate-pigeon-fly' : '-translate-x-1/2 -translate-y-1/2'
               }`}
             >
-              <img
-                src={images[currentIndex]}
+              <Image
+                src={FLY_FRAMES[currentIndex]}
                 alt="Pigeon flying"
+                width={80}
+                height={80}
                 className="w-20 h-20 object-contain mix-blend-multiply"
               />
             </div>
