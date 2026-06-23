@@ -14,6 +14,7 @@ export default async function CampaignsPage() {
         templates={[]}
         availableTags={[]}
         smtpSettingsList={[]}
+        emailJobs={[]}
         role="viewer"
       />
     );
@@ -26,6 +27,7 @@ export default async function CampaignsPage() {
   let templates: Template[] = [];
   let availableTags: string[] = [];
   let smtpSettingsList: SmtpSettings[] = [];
+  let emailJobs: any[] = [];
   
   try {
     // Fetch templates
@@ -63,6 +65,14 @@ export default async function CampaignsPage() {
     smtpSettingsList = ((smtpData || []) as SmtpSettings[]).sort((a, b) =>
       (a.created_at || '').localeCompare(b.created_at || '')
     );
+
+    // Fetch email jobs (sent logs)
+    const { data: jobsData } = await supabase
+      .from('email_jobs')
+      .select('*, contacts(name, email), campaigns(name), templates(name)')
+      .eq('workspace_id', workspaceId)
+      .order('created_at', { ascending: false });
+    emailJobs = jobsData || [];
   } catch {}
 
   return (
@@ -71,6 +81,7 @@ export default async function CampaignsPage() {
       templates={templates}
       availableTags={availableTags}
       smtpSettingsList={smtpSettingsList}
+      emailJobs={emailJobs}
       role={role}
     />
   );

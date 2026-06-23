@@ -10,25 +10,27 @@ const STALE_JOB_MINUTES = 15;
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const force = searchParams.get('force') === 'true';
+  const campaignId = searchParams.get('campaign_id') || undefined;
   const auth = await getExecutionContext(request, force, searchParams.get('workspace_id'));
 
   if ('response' in auth) {
     return auth.response;
   }
 
-  return processQueue({ force, context: auth });
+  return processQueue({ force, campaignId, context: auth });
 }
 
 export async function POST(request: Request) {
   const { searchParams } = new URL(request.url);
   const force = searchParams.get('force') === 'true';
+  const campaignId = searchParams.get('campaign_id') || undefined;
   const auth = await getExecutionContext(request, force, searchParams.get('workspace_id'));
 
   if ('response' in auth) {
     return auth.response;
   }
 
-  return processQueue({ force, context: auth });
+  return processQueue({ force, campaignId, context: auth });
 }
 
 type ExecutionContext =
@@ -135,9 +137,11 @@ async function getExecutionContext(
 
 async function processQueue({
   force = false,
+  campaignId,
   context,
 }: {
   force?: boolean;
+  campaignId?: string;
   context: ExecutionContext;
 }) {
   const scopedWorkspaceId = context.workspaceId;
@@ -176,6 +180,10 @@ async function processQueue({
     campaignQuery = campaignQuery.eq('workspace_id', scopedWorkspaceId);
   }
 
+  if (campaignId) {
+    campaignQuery = campaignQuery.eq('id', campaignId);
+  }
+
   const { data: runningCampaigns, error: cError } = await campaignQuery;
 
   if (cError) {
@@ -198,6 +206,11 @@ async function processQueue({
   const activeCampaigns = ((runningCampaigns || []) as any[]).filter((campaign) => {
     if (force) {
       console.log(`[Campaign Filter] "${campaign.name}" | Force run active. Bypassing schedule check.`);
+      return true;
+    }
+
+    if (campaign.dispatch_type === 'immediate') {
+      console.log(`[Campaign Filter] "${campaign.name}" | Immediate dispatch active. Bypassing schedule check.`);
       return true;
     }
 
@@ -290,6 +303,19 @@ async function processQueue({
           }
         } else {
           newJobsQueued++;
+        }
+      }
+
+      // If immediate, mark campaign as completed
+      if (campaign.dispatch_type === 'immediate') {
+        const { error: completeErr } = await supabase
+          .from('campaigns')
+          .update({ status: 'completed' })
+          .eq('id', campaign.id);
+        if (completeErr) {
+          console.error(`[Cron Job] Error marking campaign ${campaign.name} as completed:`, completeErr);
+        } else {
+          console.log(`[Cron Job] Campaign "${campaign.name}" auto-completed.`);
         }
       }
     } catch (campaignErr) {

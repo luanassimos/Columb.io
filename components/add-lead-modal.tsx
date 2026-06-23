@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createContact, updateContact } from '@/app/actions/contact';
 import { Contact, ContactStatus } from '@/types';
-import { X, Plus, Loader2, User, Building2, Mail, Phone, MapPin, Tag } from 'lucide-react';
+import { X, Plus, Loader2, User, Building2, Mail, Phone, MapPin, Tag, Star } from 'lucide-react';
 
 // lucide-react@1.18 removed the LinkedIn icon — using an inline SVG instead
 const LinkedinIcon = ({ className }: { className?: string }) => (
@@ -45,6 +45,8 @@ export default function AddLeadModal({ isOpen, onClose, contactToEdit }: AddLead
   const [status, setStatus] = useState<ContactStatus>('new');
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
+  const [rating, setRating] = useState<number>(0);
+  const [hoveredRating, setHoveredRating] = useState<number>(0);
 
   const firstInputRef = useRef<HTMLInputElement>(null);
 
@@ -67,6 +69,7 @@ export default function AddLeadModal({ isOpen, onClose, contactToEdit }: AddLead
         setLinkedinUrl(contactToEdit.linkedin_url || '');
         setStatus(contactToEdit.status || 'new');
         setTags(contactToEdit.tags || []);
+        setRating(contactToEdit.rating || 0);
       } else {
         setName('');
         setCompany('');
@@ -76,6 +79,7 @@ export default function AddLeadModal({ isOpen, onClose, contactToEdit }: AddLead
         setLinkedinUrl('');
         setStatus('new');
         setTags([]);
+        setRating(0);
       }
     }
   }, [isOpen, contactToEdit]);
@@ -133,6 +137,7 @@ export default function AddLeadModal({ isOpen, onClose, contactToEdit }: AddLead
         linkedin_url: linkedinUrl || undefined,
         tags,
         status,
+        rating,
       });
     } else {
       result = await createContact({
@@ -142,6 +147,7 @@ export default function AddLeadModal({ isOpen, onClose, contactToEdit }: AddLead
         linkedin_url: linkedinUrl || undefined,
         tags,
         status,
+        rating,
       });
     }
     setIsSubmitting(false);
@@ -270,6 +276,37 @@ export default function AddLeadModal({ isOpen, onClose, contactToEdit }: AddLead
               placeholder="https://linkedin.com/in/joaosilva"
               className="w-full px-3 py-2.5 rounded-lg border border-[#D8E0EA] bg-[#F7FAFF] text-sm text-[#061A40] placeholder-[#475569]/50 focus:outline-none focus:border-[#2D6BFF] focus:bg-white transition-all"
             />
+          </div>
+
+          {/* Grau de Importância (Rating) */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-[#002B6A] flex items-center gap-1.5">
+              <Star className="h-3.5 w-3.5" /> Grau de Importância
+            </label>
+            <div className="flex items-center gap-1">
+              {[1, 2, 3, 4, 5].map((star) => {
+                const isFilled = star <= (hoveredRating || rating);
+                return (
+                  <button
+                    key={star}
+                    type="button"
+                    onClick={() => setRating(star)}
+                    onMouseEnter={() => setHoveredRating(star)}
+                    onMouseLeave={() => setHoveredRating(0)}
+                    className="text-amber-400 hover:scale-110 transition-transform focus:outline-none cursor-pointer"
+                  >
+                    <Star
+                      className="h-6 w-6"
+                      fill={isFilled ? 'currentColor' : 'none'}
+                      stroke="currentColor"
+                    />
+                  </button>
+                );
+              })}
+              <span className="text-xs text-[#475569] ml-2 font-medium">
+                {rating > 0 ? `${rating} estrela${rating > 1 ? 's' : ''}` : 'Sem classificação'}
+              </span>
+            </div>
           </div>
 
           {/* Status */}

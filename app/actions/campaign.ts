@@ -13,6 +13,7 @@ export interface CreateCampaignInput {
   schedule_time: string;
   target_tags: string[];
   smtp_setting_id?: string | null;
+  dispatch_type?: 'scheduled' | 'immediate';
 }
 
 export interface UpdateCampaignInput {
@@ -24,6 +25,7 @@ export interface UpdateCampaignInput {
   schedule_time: string;
   target_tags: string[];
   smtp_setting_id?: string | null;
+  dispatch_type?: 'scheduled' | 'immediate';
 }
 
 async function validateCampaignReferences(
@@ -83,6 +85,7 @@ export async function createCampaign(input: CreateCampaignInput) {
       schedule_time: input.schedule_time,
       target_tags: input.target_tags,
       smtp_setting_id: input.smtp_setting_id || null,
+      dispatch_type: input.dispatch_type || 'scheduled',
     })
     .select('id')
     .single();
@@ -105,20 +108,24 @@ export async function updateCampaign(input: UpdateCampaignInput) {
     return { error: 'You do not have permission to update campaigns' };
   }
 
+  const { data: existingCampaign, error: existingError } = await supabase
+    .from('campaigns')
+    .select('id, status')
+    .eq('id', input.id)
+    .eq('workspace_id', workspaceId)
+    .maybeSingle();
+
+  if (existingError || !existingCampaign) {
+    return { error: 'Campaign not found in active workspace' };
+  }
+
+  if (existingCampaign.status === 'completed') {
+    return { error: 'Completed campaigns cannot be edited' };
+  }
+
   if (!canManageCampaigns(context.role)) {
     if (input.status !== 'draft') {
       return { error: 'You do not have permission to activate campaigns' };
-    }
-
-    const { data: existingCampaign, error: existingError } = await supabase
-      .from('campaigns')
-      .select('id, status')
-      .eq('id', input.id)
-      .eq('workspace_id', workspaceId)
-      .maybeSingle();
-
-    if (existingError || !existingCampaign) {
-      return { error: 'Campaign not found in active workspace' };
     }
 
     if (existingCampaign.status !== 'draft') {
@@ -139,6 +146,7 @@ export async function updateCampaign(input: UpdateCampaignInput) {
       schedule_time: input.schedule_time,
       target_tags: input.target_tags,
       smtp_setting_id: input.smtp_setting_id || null,
+      dispatch_type: input.dispatch_type || 'scheduled',
     })
     .eq('id', input.id)
     .eq('workspace_id', workspaceId);

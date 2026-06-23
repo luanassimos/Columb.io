@@ -10,6 +10,7 @@ interface SendSuccessModalProps {
   isOpen: boolean;
   onClose: () => void;
   emailSendMode?: EmailSendMode;
+  campaignId?: string;
 }
 
 const FLY_FRAMES = [
@@ -19,7 +20,7 @@ const FLY_FRAMES = [
   '/fly02.webp',
 ];
 
-export default function SendSuccessModal({ isOpen, onClose, emailSendMode = 'mock' }: SendSuccessModalProps) {
+export default function SendSuccessModal({ isOpen, onClose, emailSendMode = 'mock', campaignId }: SendSuccessModalProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [animationPhase, setAnimationPhase] = useState<'idle' | 'takeoff' | 'sent'>('idle');
   const [mounted, setMounted] = useState(false);
@@ -71,15 +72,11 @@ export default function SendSuccessModal({ isOpen, onClose, emailSendMode = 'moc
 
     const startTime = Date.now();
 
-    // 1. Start takeoff / flying to the right after 600ms
-    const takeoffTimer = setTimeout(() => {
-      setAnimationPhase('takeoff');
-    }, 600);
-
     let isSubscribed = true;
 
     // 2. Perform API call to force process campaigns
-    fetch('/api/send?force=true')
+    const url = campaignId ? `/api/send?force=true&campaign_id=${campaignId}` : '/api/send?force=true';
+    fetch(url)
       .then(async (res) => {
         if (!res.ok) {
           const errData = await res.json().catch(() => ({}));
@@ -90,16 +87,16 @@ export default function SendSuccessModal({ isOpen, onClose, emailSendMode = 'moc
       .then((data) => {
         if (!isSubscribed) return;
 
-        // Ensure the takeoff animation runs for at least 1.4s total before showing success
-        const elapsed = Date.now() - startTime;
-        const remaining = Math.max(0, 1400 - elapsed);
+        // Start flight animation upon successful request completion
+        setAnimationPhase('takeoff');
 
+        // Let the takeoff animation run for 1s (matching keyframes duration) before showing success state
         setTimeout(() => {
           if (!isSubscribed) return;
           setResult(data);
           setAnimationPhase('sent');
           setStatus('success');
-        }, remaining);
+        }, 1000);
       })
       .catch((err) => {
         if (!isSubscribed) return;
@@ -110,7 +107,6 @@ export default function SendSuccessModal({ isOpen, onClose, emailSendMode = 'moc
 
     return () => {
       isSubscribed = false;
-      clearTimeout(takeoffTimer);
     };
   }, [isOpen]);
 
@@ -137,6 +133,50 @@ export default function SendSuccessModal({ isOpen, onClose, emailSendMode = 'moc
         .animate-pigeon-fly {
           animation: flyRight 1s cubic-bezier(0.4, 0, 0.2, 1) forwards;
         }
+
+        /* Light CSS Clouds */
+        .cloud {
+          background: #ffffff;
+          border-radius: 100px;
+          position: absolute;
+          width: 80px;
+          height: 25px;
+          box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.05);
+        }
+        .cloud::after, .cloud::before {
+          content: '';
+          position: absolute;
+          background: #ffffff;
+          z-index: -1;
+        }
+        .cloud::after {
+          width: 35px;
+          height: 35px;
+          top: -15px;
+          left: 10px;
+          border-radius: 100px;
+        }
+        .cloud::before {
+          width: 45px;
+          height: 45px;
+          top: -25px;
+          right: 10px;
+          border-radius: 100px;
+        }
+
+        @keyframes drift {
+          0% { transform: translateX(260px); }
+          100% { transform: translateX(-160px); }
+        }
+        .cloud-1 {
+          animation: drift 25s linear infinite;
+        }
+        .cloud-2 {
+          animation: drift 15s linear infinite;
+        }
+        .cloud-3 {
+          animation: drift 35s linear infinite;
+        }
       `}</style>
 
       <div className="relative w-full max-w-md bg-white rounded-3xl border border-[#D8E0EA] p-8 shadow-2xl overflow-hidden mx-4 text-center">
@@ -149,7 +189,13 @@ export default function SendSuccessModal({ isOpen, onClose, emailSendMode = 'moc
         </button>
 
         {/* Animation Container */}
-        <div className="relative w-full h-40 bg-[#EAF2FF]/50 border border-[#D8E0EA]/40 rounded-2xl flex items-center justify-center overflow-hidden mb-6">
+        <div className="relative w-full h-40 bg-gradient-to-b from-[#EAF2FF] to-[#D5E3FC] border border-[#D8E0EA]/40 rounded-2xl flex items-center justify-center overflow-hidden mb-6">
+          {/* Drifting Clouds */}
+          <div className="absolute inset-0 pointer-events-none overflow-hidden opacity-60">
+            <div className="cloud cloud-1 top-6 scale-75 opacity-80" style={{ left: '-80px', animationDelay: '0s' }}></div>
+            <div className="cloud cloud-2 top-16 scale-50 opacity-60" style={{ left: '-80px', animationDelay: '-5s' }}></div>
+            <div className="cloud cloud-3 top-4 scale-[0.6] opacity-75" style={{ left: '-80px', animationDelay: '-12s' }}></div>
+          </div>
           
           {/* Animated Pigeon */}
           {animationPhase !== 'sent' && status !== 'error' && (
@@ -191,97 +237,7 @@ export default function SendSuccessModal({ isOpen, onClose, emailSendMode = 'moc
           </div>
         </div>
 
-        {/* Message and Status */}
-        <div className="space-y-2 min-h-[120px] flex flex-col justify-center items-center">
-          {status === 'success' ? (
-            <div className="animate-loading-delay space-y-3 w-full">
-              <h3 className="text-xl font-bold text-[#002B6A]">Disparo Concluído!</h3>
-              
-              <div className="text-xs text-[#475569] space-y-1.5 bg-slate-50 border border-slate-100 p-4 rounded-2xl text-left max-w-sm mx-auto shadow-sm">
-                <div className={`flex justify-between rounded-lg px-2 py-1 font-bold ${
-                  isLive ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
-                }`}>
-                  <span>Modo de envio:</span>
-                  <strong className="uppercase">{visibleModeLabel}</strong>
-                </div>
-                {result?.newJobsQueued !== undefined && (
-                  <div className="flex justify-between">
-                    <span>E-mails enfileirados:</span>
-                    <strong className="text-[#002B6A]">{result.newJobsQueued}</strong>
-                  </div>
-                )}
-                {result?.duplicateJobsSkipped !== undefined && result.duplicateJobsSkipped > 0 && (
-                  <div className="flex justify-between">
-                    <span>Duplicados ignorados:</span>
-                    <strong className="text-slate-500">{result.duplicateJobsSkipped}</strong>
-                  </div>
-                )}
-                {result?.sentCount !== undefined && (
-                  <div className="flex justify-between">
-                    <span>E-mails enviados:</span>
-                    <strong className="text-emerald-600">{result.sentCount}</strong>
-                  </div>
-                )}
-                {result?.mockedCount !== undefined && (
-                  <div className="flex justify-between">
-                    <span>E-mails mockados:</span>
-                    <strong className="text-amber-600">{result.mockedCount}</strong>
-                  </div>
-                )}
-                {result?.dryRunCount !== undefined && (
-                  <div className="flex justify-between">
-                    <span>Dry runs:</span>
-                    <strong className="text-amber-600">{result.dryRunCount}</strong>
-                  </div>
-                )}
-                {result?.failedCount !== undefined && result.failedCount > 0 && (
-                  <div className="flex justify-between border-t border-slate-100 pt-1.5 text-rose-500">
-                    <span>Falhas no envio:</span>
-                    <strong>{result.failedCount}</strong>
-                  </div>
-                )}
-                {result?.retriedCount !== undefined && result.retriedCount > 0 && (
-                  <div className="flex justify-between border-t border-slate-100 pt-1.5 text-amber-600">
-                    <span>Retentativas agendadas:</span>
-                    <strong>{result.retriedCount}</strong>
-                  </div>
-                )}
-                {result?.skippedCount !== undefined && result.skippedCount > 0 && (
-                  <div className="flex justify-between border-t border-slate-100 pt-1.5 text-slate-500">
-                    <span>Ignorados:</span>
-                    <strong>{result.skippedCount}</strong>
-                  </div>
-                )}
-                {result?.message && (
-                  <p className="text-[11px] italic text-[#475569]/80 border-t border-slate-100 pt-1.5 text-center mt-1">
-                    {result.message}
-                  </p>
-                )}
-              </div>
-            </div>
-          ) : status === 'error' ? (
-            <div className="animate-loading-delay w-full">
-              <h3 className="text-xl font-bold text-[#002B6A]">Erro no Processamento</h3>
-              <p className="text-xs text-[#475569] mt-1">
-                Não foi possível executar a campanha ou processar a fila.
-              </p>
-              <div className="text-xs text-rose-600 bg-rose-50 border border-rose-100 p-3.5 rounded-2xl mt-3 max-w-sm mx-auto leading-normal text-left font-medium">
-                <strong>Detalhes do erro:</strong><br />
-                {errorMessage}
-              </div>
-            </div>
-          ) : (
-            <div>
-              <h3 className="text-lg font-bold text-[#002B6A] flex items-center justify-center gap-2">
-                <Send className="h-4.5 w-4.5 text-[#2D6BFF] animate-pulse" />
-                <span>Processando campanhas...</span>
-              </h3>
-              <p className="text-xs text-[#475569] mt-1.5 leading-normal max-w-xs mx-auto">
-                Buscando campanhas ativas, gerando destinatários e transmitindo via SMTP.
-              </p>
-            </div>
-          )}
-        </div>
+
 
         {/* Bottom Actions */}
         <div className="mt-6">

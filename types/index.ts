@@ -26,6 +26,7 @@ export interface Contact {
   linkedin_url?: string | null;
   tags: string[];
   status: ContactStatus;
+  rating: number; // 0 to 5 stars
   last_contact_at?: string | null;
   imported_at?: string | null;
   created_at: string;
@@ -46,12 +47,13 @@ export interface Campaign {
   id: string;
   workspace_id: string;
   name: string;
-  template_id: string;
+  template_id?: string | null;
   status: CampaignStatus;
   schedule_days: number[];
   schedule_time: string;
   target_tags: string[];
   smtp_setting_id?: string | null;
+  dispatch_type: 'scheduled' | 'immediate';
   created_at: string;
   // Included in relations
   template?: Template;
@@ -63,7 +65,7 @@ export interface FollowupStep {
   id: string;
   workspace_id: string;
   campaign_id: string;
-  template_id: string;
+  template_id?: string | null;
   delay_days: number;
   step_number: number;
   created_at: string;
@@ -81,7 +83,7 @@ export interface EmailJob {
   workspace_id: string;
   campaign_id: string;
   contact_id: string;
-  template_id: string;
+  template_id?: string | null;
   idempotency_key: string;
   sequence_index: number;
   status: JobStatus;
@@ -104,6 +106,7 @@ export interface EmailJob {
   template?: Template;
   templates?: Template;
   campaign?: Campaign;
+  campaigns?: Campaign;
 }
 
 export type NotificationType = 'email_replied' | 'campaign_finished' | 'followup_pending' | 'delivery_failed';
