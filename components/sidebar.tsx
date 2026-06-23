@@ -15,7 +15,8 @@ import {
   Settings,
   LogOut,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Calendar
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -31,7 +32,8 @@ export default function Sidebar({ profileName, userEmail }: SidebarProps) {
     { label: 'Dashboard', icon: LayoutDashboard, href: '/dashboard' },
     { label: 'Leads', icon: Users, href: '/contacts' },
     { label: 'Templates', icon: Mail, href: '/templates' },
-    { label: 'Campaigns', icon: Send, href: '/campaigns' },
+    { label: 'Campaigns', icon: Calendar, href: '/campaigns' },
+    { label: 'Email Blasts', icon: Send, href: '/blasts' },
     { label: 'Inbox', icon: Inbox, href: '/inbox' },
   ];
 

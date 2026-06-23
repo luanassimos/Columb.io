@@ -14,6 +14,7 @@ interface CampaignModalProps {
   availableTags: string[];
   smtpSettingsList: SmtpSettings[];
   canManageStatus: boolean;
+  mode?: 'campaign' | 'blast';
 }
 
 const STATUS_OPTIONS: { value: CampaignStatus; label: string; color: string }[] = [
@@ -30,6 +31,7 @@ export default function CampaignModal({
   availableTags,
   smtpSettingsList,
   canManageStatus,
+  mode = 'campaign',
 }: CampaignModalProps) {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -68,22 +70,22 @@ export default function CampaignModal({
         setScheduleTime(campaignToEdit.schedule_time || '09:00');
         setTargetTags(campaignToEdit.target_tags || []);
         setSmtpSettingId(campaignToEdit.smtp_setting_id || smtpSettingsList[0]?.id || '');
-        setDispatchType(campaignToEdit.dispatch_type || 'scheduled');
+        setDispatchType(campaignToEdit.dispatch_type || (mode === 'blast' ? 'immediate' : 'scheduled'));
       } else {
         setName('');
         // Pre-select first template if available
         setTemplateId(templates[0]?.id || '');
         setStatus('draft');
-        // Pre-fill with weekdays (Mon-Fri) and 09:00
-        setScheduleDays([1, 2, 3, 4, 5]);
-        setScheduleTime('09:00');
+        // Pre-fill with weekdays (Mon-Fri) and 09:00 for campaigns, empty for blasts
+        setScheduleDays(mode === 'blast' ? [] : [1, 2, 3, 4, 5]);
+        setScheduleTime(mode === 'blast' ? '00:00' : '09:00');
         setTargetTags([]);
         setSmtpSettingId(smtpSettingsList[0]?.id || '');
-        setDispatchType('scheduled');
+        setDispatchType(mode === 'blast' ? 'immediate' : 'scheduled');
       }
       setError(null);
     }
-  }, [isOpen, campaignToEdit, templates, smtpSettingsList, canManageStatus]);
+  }, [isOpen, campaignToEdit, templates, smtpSettingsList, canManageStatus, mode]);
 
   // Check if template has already been sent to contacts matching the target tags
   useEffect(() => {
@@ -252,10 +254,14 @@ export default function CampaignModal({
         <div className="flex items-center justify-between px-6 py-5 border-b border-[#D8E0EA] shrink-0">
           <div>
             <h2 className="text-lg font-bold text-[#002B6A]">
-              {campaignToEdit ? 'Edit Campaign' : 'Create Campaign'}
+              {campaignToEdit 
+                ? (mode === 'blast' ? 'Edit Email Blast' : 'Edit Campaign') 
+                : (mode === 'blast' ? 'Create Email Blast' : 'Create Campaign')}
             </h2>
             <p className="text-xs text-[#475569] mt-0.5">
-              {campaignToEdit ? 'Update campaign configuration below.' : 'Configure automated email sequences.'}
+              {campaignToEdit 
+                ? 'Update configuration below.' 
+                : (mode === 'blast' ? 'Configure one-off mass email blast.' : 'Configure automated email sequences.')}
             </p>
           </div>
           <button
@@ -281,14 +287,14 @@ export default function CampaignModal({
           {/* Name */}
           <div className="space-y-1.5">
             <label className="flex items-center gap-1.5 text-xs font-semibold text-[#002B6A]">
-              <Send className="h-3.5 w-3.5" /> Campaign Name <span className="text-rose-400">*</span>
+              <Send className="h-3.5 w-3.5" /> {mode === 'blast' ? 'Blast Name' : 'Campaign Name'} <span className="text-rose-400">*</span>
             </label>
             <input
               ref={firstInputRef}
               type="text"
               value={name}
               onChange={e => setName(e.target.value)}
-              placeholder="e.g. Q2 Outreach Campaign"
+              placeholder={mode === 'blast' ? 'e.g. Product Launch Blast' : 'e.g. Q2 Outreach Campaign'}
               className="w-full px-3 py-2.5 rounded-lg border border-[#D8E0EA] bg-[#F7FAFF] text-sm text-[#061A40] placeholder-[#475569]/50 focus:outline-none focus:border-[#2D6BFF] focus:bg-white transition-all"
             />
           </div>
@@ -395,38 +401,7 @@ export default function CampaignModal({
             </div>
           )}
 
-          {/* Tipo de Envio / Dispatch Type */}
-          <div className="space-y-2">
-            <label className="flex items-center gap-1.5 text-xs font-semibold text-[#002B6A]">
-              <Calendar className="h-3.5 w-3.5" /> Tipo de Envio <span className="text-rose-400">*</span>
-            </label>
-            <div className="flex gap-4">
-              <button
-                type="button"
-                onClick={() => setDispatchType('scheduled')}
-                className={`flex-1 py-2.5 rounded-lg text-sm font-semibold border transition-all flex items-center justify-center gap-2 ${
-                  dispatchType === 'scheduled'
-                    ? 'bg-[#2D6BFF] text-white border-[#2D6BFF]'
-                    : 'bg-[#F7FAFF] text-[#475569] border-[#D8E0EA] hover:bg-[#EAF2FF] cursor-pointer'
-                }`}
-              >
-                Programar (Scheduled)
-              </button>
-              <button
-                type="button"
-                onClick={() => setDispatchType('immediate')}
-                className={`flex-1 py-2.5 rounded-lg text-sm font-semibold border transition-all flex items-center justify-center gap-2 ${
-                  dispatchType === 'immediate'
-                    ? 'bg-[#2D6BFF] text-white border-[#2D6BFF]'
-                    : 'bg-[#F7FAFF] text-[#475569] border-[#D8E0EA] hover:bg-[#EAF2FF] cursor-pointer'
-                }`}
-              >
-                Disparar no momento (Send now)
-              </button>
-            </div>
-          </div>
-
-          {dispatchType === 'scheduled' && (
+          {mode === 'campaign' && (
             <>
               {/* Days of the Week */}
               <div className="space-y-2">
@@ -599,7 +574,7 @@ export default function CampaignModal({
             ) : campaignToEdit ? (
               <>Save Changes</>
             ) : (
-              <><Plus className="h-4 w-4" /> Create Campaign</>
+              <><Plus className="h-4 w-4" /> {mode === 'blast' ? 'Create Email Blast' : 'Create Campaign'}</>
             )}
           </button>
         </div>

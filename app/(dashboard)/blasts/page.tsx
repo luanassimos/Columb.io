@@ -1,15 +1,15 @@
 import React from 'react';
 import { redirect } from 'next/navigation';
 import { Campaign, Template, SmtpSettings } from '@/types';
-import CampaignsClient from './campaigns-client';
+import BlastsClient from './blasts-client';
 import { getActiveWorkspaceContext } from '@/lib/workspace';
 
-export default async function CampaignsPage() {
+export default async function BlastsPage() {
   const context = await getActiveWorkspaceContext();
   if ('error' in context) {
     if (context.error === 'Unauthorized') redirect('/login');
     return (
-      <CampaignsClient
+      <BlastsClient
         campaigns={[]}
         templates={[]}
         availableTags={[]}
@@ -39,12 +39,12 @@ export default async function CampaignsPage() {
     
     templates = tData || [];
 
-    // Fetch campaigns with templates joined (excluding immediate blasts)
+    // Fetch immediate blasts only
     const { data: cData, error } = await supabase
       .from('campaigns')
       .select('*, templates(*)')
       .eq('workspace_id', workspaceId)
-      .not('dispatch_type', 'eq', 'immediate')
+      .eq('dispatch_type', 'immediate')
       .order('created_at', { ascending: false });
 
     if (!error) campaigns = cData || [];
@@ -74,12 +74,12 @@ export default async function CampaignsPage() {
       .eq('workspace_id', workspaceId)
       .order('created_at', { ascending: false });
     
-    // Filter in-memory to exclude jobs from immediate blasts
-    emailJobs = (jobsData || []).filter(job => job.campaigns?.dispatch_type !== 'immediate');
+    // Filter in-memory to include only jobs from immediate blasts
+    emailJobs = (jobsData || []).filter(job => job.campaigns?.dispatch_type === 'immediate');
   } catch {}
 
   return (
-    <CampaignsClient
+    <BlastsClient
       campaigns={campaigns}
       templates={templates}
       availableTags={availableTags}
