@@ -96,6 +96,13 @@ export default function SendSuccessModal({ isOpen, onClose, emailSendMode = 'moc
           setResult(data);
           setAnimationPhase('sent');
           setStatus('success');
+
+          // Auto-close modal 1.5 seconds after success checkmark appears
+          setTimeout(() => {
+            if (isSubscribed) {
+              onClose();
+            }
+          }, 1500);
         }, 1000);
       })
       .catch((err) => {
@@ -241,12 +248,21 @@ export default function SendSuccessModal({ isOpen, onClose, emailSendMode = 'moc
 
         {/* Bottom Actions */}
         <div className="mt-6">
-          <button
-            onClick={onClose}
-            className="w-full py-2.5 bg-[#002B6A] hover:bg-[#001D47] text-white text-xs font-bold rounded-xl transition-all"
-          >
-            Voltar ao Dashboard
-          </button>
+          {status === 'sending' ? (
+            <button
+              onClick={onClose}
+              className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all cursor-pointer"
+            >
+              Cancelar
+            </button>
+          ) : status === 'error' ? (
+            <button
+              onClick={onClose}
+              className="w-full py-2.5 bg-rose-500 hover:bg-rose-600 text-white text-xs font-bold rounded-xl transition-all cursor-pointer"
+            >
+              Fechar
+            </button>
+          ) : null}
         </div>
       </div>
     </div>,
