@@ -1,0 +1,16 @@
+.env
+.env.*
+!.env.example
+
+node_modules
+.next
+out
+build
+coverage
+
+supabase/.branches
+supabase/.temp
+
+*.log
+*.pem
+*.tsbuildinfo
