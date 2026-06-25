@@ -137,20 +137,24 @@ export async function importLeadsToContacts(leadIds: string[]) {
   const contactsToInsert = leads.map((lead) => {
     // Generate email
     let email = '';
-    const domain = lead.website ? extractDomain(lead.website) : null;
-    if (domain) {
-      email = `contato@${domain}`;
+    if (lead.email) {
+      email = lead.email;
     } else {
-      // Clean company name for email slug
-      const slug = lead.name
-        .toLowerCase()
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '') // remove accents
-        .replace(/[^a-z0-9]/g, '-') // replace non-alphanumeric with hyphen
-        .replace(/-+/g, '-') // collapse multiple hyphens
-        .trim()
-        .replace(/^-|-$/g, ''); // trim hyphens
-      email = `contato-${slug || 'lead'}-${lead.id.substring(0, 6)}@columb-placeholder.com`;
+      const domain = lead.website ? extractDomain(lead.website) : null;
+      if (domain) {
+        email = `contato@${domain}`;
+      } else {
+        // Clean company name for email slug
+        const slug = lead.name
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '') // remove accents
+          .replace(/[^a-z0-9]/g, '-') // replace non-alphanumeric with hyphen
+          .replace(/-+/g, '-') // collapse multiple hyphens
+          .trim()
+          .replace(/^-|-$/g, ''); // trim hyphens
+        email = `contato-${slug || 'lead'}-${lead.id.substring(0, 6)}@columb-placeholder.com`;
+      }
     }
 
     return {

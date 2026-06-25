@@ -71,11 +71,11 @@ async function runScraper(
       else if (radiusKm <= 15) zoom = 12;
       else zoom = 11;
     }
-    console.log(`[Scraper] Iniciando Playwright para "${category}" em Geo: ${lat}, ${lng} (raio: ${radius ? radius / 1000 : '?'}km, zoom: ${zoom}, limite: ${limitCount})...`);
+    console.log(`[Scraper] [Rápido] Iniciando Playwright para "${category}" em Geo: ${lat}, ${lng} (raio: ${radius ? radius / 1000 : '?'}km, zoom: ${zoom}, limite: ${limitCount})...`);
     const searchQuery = encodeURIComponent(category);
     url = `https://www.google.com/maps/search/${searchQuery}/@${lat},${lng},${zoom}z`;
   } else {
-    console.log(`[Scraper] Iniciando Playwright para "${category}" em "${region || ''}" (limite: ${limitCount})...`);
+    console.log(`[Scraper] [Rápido] Iniciando Playwright para "${category}" em "${region || ''}" (limite: ${limitCount})...`);
     const searchQuery = encodeURIComponent(`${category} ${region || ''}`);
     url = `https://www.google.com/maps/search/${searchQuery}`;
   }
@@ -92,7 +92,7 @@ async function runScraper(
 
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
 
-  console.log('[Scraper] Página do Google Maps carregada. Rolando feed...');
+  console.log('[Scraper] Página do Google Maps carregada. Rolando feed rápido...');
 
   const feedSelector = 'div[role="feed"]';
   let currentCount = 0;
@@ -104,12 +104,12 @@ async function runScraper(
   try {
     await page.waitForSelector('a[href*="/maps/place/"]', { timeout: 15000 });
   } catch (e) {
-    console.log('[Scraper] Nenhum resultado encontrado ou timeout ao carregar os cards inicialmentes.');
+    console.log('[Scraper] Nenhum resultado encontrado ou timeout ao carregar os cards inicialmente.');
     await browser.close();
     return;
   }
 
-  // Scroll to load enough cards
+  // Scroll to load enough cards (1s delay for high speed)
   while (currentCount < limitCount && scrollAttempts < maxScrollAttempts) {
     const cards = page.locator('a[href*="/maps/place/"]');
     currentCount = await cards.count();
@@ -123,11 +123,11 @@ async function runScraper(
     const feed = page.locator(feedSelector);
     if (await feed.count() > 0) {
       await feed.first().evaluate((node) => node.scrollBy(0, node.scrollHeight));
-      await page.waitForTimeout(2000);
+      await page.waitForTimeout(1000);
     } else {
       // Fallback if role="feed" is not matching
       await page.evaluate(() => window.scrollBy(0, window.innerHeight));
-      await page.waitForTimeout(2000);
+      await page.waitForTimeout(1000);
     }
     scrollAttempts++;
   }
@@ -135,7 +135,7 @@ async function runScraper(
   const cardsLocator = page.locator('a[href*="/maps/place/"]');
   const totalAvailable = await cardsLocator.count();
   const countToScrape = Math.min(limitCount, totalAvailable);
-  console.log(`[Scraper] Iniciando extração detalhada de ${countToScrape} estabelecimentos.`);
+  console.log(`[Scraper] Iniciando extração rápida (sem clique) de ${countToScrape} estabelecimentos.`);
 
   for (let i = 0; i < countToScrape; i++) {
     try {
@@ -151,71 +151,149 @@ async function runScraper(
         break;
       }
 
-      console.log(`[Scraper] Carregando detalhes do card ${i + 1}/${countToScrape}...`);
-      
       const card = cardsLocator.nth(i);
       
-      // Scroll card into view and click
+      // Ensure the card is scrolled into view (fast, non-blocking)
       await card.scrollIntoViewIfNeeded();
-      await card.click({ force: true });
-      
-      // Wait for details panel to load/render
-      await page.waitForTimeout(2000);
 
-      // Extract Name
-      const nameLocator = page.locator('h1');
-      let name = '';
-      if (await nameLocator.count() > 0) {
-        name = (await nameLocator.first().textContent())?.trim() || '';
+      // Extract place coordinates directly from the link's href
+      const href = await card.getAttribute('href');
+      let leadLat: number | null = null;
+      let leadLng: number | null = null;
+      if (href) {
+        const match = href.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+        if (match) {
+          leadLat = parseFloat(match[1]);
+          leadLng = parseFloat(match[2]);
+        }
       }
 
-      if (!name) {
-        // Fallback: extract from card aria-label
-        const ariaLabel = await card.getAttribute('aria-label');
-        name = ariaLabel || `Empresa ${i + 1}`;
-      }
+      // Extract details directly from the search result card in the list
+      const leadData = await card.evaluate((cardEl) => {
+        let name = cardEl.getAttribute('aria-label') || '';
+        name = name.trim();
 
-      // Extract Website
-      const websiteLocator = page.locator('a[data-item-id="authority"]');
-      let website = '';
-      if (await websiteLocator.count() > 0) {
-        website = (await websiteLocator.first().getAttribute('href')) || '';
-      }
+        // The card is a link, look for its main container in the feed list
+        const container = cardEl.closest('.Nv2y1d') || cardEl.parentElement?.parentElement || cardEl;
 
-      // Extract Phone
-      const phoneLocator = page.locator('button[data-item-id^="phone:tel:"]');
-      let phone = '';
-      if (await phoneLocator.count() > 0) {
-        const rawPhone = await phoneLocator.first().textContent();
-        phone = rawPhone?.replace(/[^0-9+\s()-]/g, '').trim() || '';
-      }
+        if (!name) {
+          const titleEl = container.querySelector('.qbfVoi, .fontHeadlineSmall, .fontBodyMedium');
+          if (titleEl) {
+            name = titleEl.textContent || '';
+          }
+        }
 
-      // Extract Address
-      const addressLocator = page.locator('button[data-item-id="address"]');
-      let address = '';
-      if (await addressLocator.count() > 0) {
-        address = (await addressLocator.first().textContent())?.trim() || '';
-      }
+        // Find Website button/anchor inside the card container
+        let website = null;
+        const webLink = container.querySelector('a[aria-label*="Website"], a[aria-label*="website"], a[data-value="Website"], a[href^="http"]:not([href*="google.com"])');
+        if (webLink) {
+          website = webLink.getAttribute('href');
+        }
+
+        // Parse phone, address, and category from card text elements
+        let phone = null;
+        let address = null;
+        let category = null;
+
+        const isPhone = (str: string) => {
+          if (str.includes('(') && str.includes(')')) return true;
+          if (str.replace(/[^0-9]/g, '').length >= 8 && (str.includes('-') || str.includes(' '))) {
+            const letterCount = str.replace(/[^a-zA-Z]/g, '').length;
+            if (letterCount < 5) return true;
+          }
+          return false;
+        };
+
+        const isRating = (str: string) => {
+          return /^[345][.,]\d\s*\(\d+\)$/.test(str) || /^[345][.,]\d$/.test(str);
+        };
+
+        const isAddress = (str: string) => {
+          const keywords = ['av', 'rua', 'r.', 'alameda', 'al.', 'rodovia', 'rod.', 'estrada', 'estr.', 'travessa', 'trv.', 'praça', 'prc.', 'avenida', 'bloco', 'nº', 'sala', 'andar', 'centro', 'bairro'];
+          const lower = str.toLowerCase();
+          const hasKeyword = keywords.some(k => lower.includes(k));
+          const hasComma = str.includes(',');
+          return (hasKeyword || hasComma) && str.length > 8 && !isPhone(str);
+        };
+
+        const isCategory = (str: string) => {
+          if (str.length > 40) return false;
+          if (/\d/.test(str)) return false;
+          const lowercase = str.toLowerCase();
+          const excludes = ['aberto', 'fechado', 'fecha às', 'abre às', 'fechado temporariamente', 'atendimento', 'online', 'no local', 'website', 'direções', 'salvar', 'ligar', 'compartilhar'];
+          if (excludes.some(e => lowercase.includes(e))) return false;
+          return true;
+        };
+
+        // Extract text elements inside the card
+        const textElements = Array.from(container.querySelectorAll('.W4E25c, .fontBodyMedium, div, span'))
+          .map(el => el.textContent?.trim() || '')
+          .filter(t => t.length > 0);
+
+        const uniqueTexts = [];
+        const seen = new Set();
+        for (const txt of textElements) {
+          if (txt === name) continue;
+          if (!seen.has(txt)) {
+            seen.add(txt);
+            uniqueTexts.push(txt);
+          }
+        }
+
+        // Try to match fields
+        for (const txt of uniqueTexts) {
+          if (txt.includes('·')) {
+            const parts = txt.split('·').map(p => p.trim());
+            for (const part of parts) {
+              if (isPhone(part)) {
+                phone = part;
+              } else if (isRating(part)) {
+                // ignore
+              } else if (isAddress(part)) {
+                address = part;
+              } else if (isCategory(part)) {
+                category = part;
+              }
+            }
+          } else {
+            if (isPhone(txt)) {
+              phone = txt;
+            } else if (isAddress(txt)) {
+              address = txt;
+            } else if (isCategory(txt)) {
+              category = txt;
+            }
+          }
+        }
+
+        return { name, website, phone, address, category };
+      });
 
       const lead = {
-        name,
-        phone: phone || null,
-        address: address || null,
-        website: website || null,
+        name: leadData.name || `Empresa ${i + 1}`,
+        phone: leadData.phone || null,
+        address: leadData.address || null,
+        website: leadData.website || null,
+        email: null, // Scraped emails are not fetched in this phase
+        category: leadData.category || category,
+        lat: leadLat,
+        lng: leadLng,
       };
 
-      console.log(`[Scraper] Extraído: "${name}" | Fone: ${phone || 'N/A'} | Web: ${website || 'N/A'}`);
+      console.log(`[Scraper] [Rápido] Extraído: "${lead.name}" | Fone: ${lead.phone || 'N/A'} | Web: ${lead.website || 'N/A'} | Geo: ${leadLat}, ${leadLng}`);
       
       // Callback to save to DB and update progress
       await onProgress(i + 1, lead);
+      
+      // Small pause to yield loop execution
+      await page.waitForTimeout(50);
     } catch (cardError) {
       console.error(`[Scraper] Erro ao extrair card ${i + 1}:`, cardError);
-      // Continue to next card
     }
   }
 
   await browser.close();
-  console.log('[Scraper] Captação finalizada com sucesso.');
+  console.log('[Scraper] Captação rápida finalizada.');
 }
 
 async function processQueue() {
@@ -273,8 +351,11 @@ async function processQueue() {
             phone: lead.phone,
             address: lead.address,
             website: lead.website,
-            category: job.category,
+            category: lead.category || job.category,
             region: leadRegion,
+            lat: lead.lat || null,
+            lng: lead.lng || null,
+            email: lead.email || null,
           });
 
         if (leadError) {
