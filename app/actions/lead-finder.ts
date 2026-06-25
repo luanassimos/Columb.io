@@ -184,3 +184,29 @@ export async function importLeadsToContacts(leadIds: string[]) {
 
   return { success: true, count: contactsToInsert.length };
 }
+
+export async function deleteLeads(leadIds: string[]) {
+  if (leadIds.length === 0) return { success: true, count: 0 };
+
+  const context = await getActiveWorkspaceContext();
+  if ('error' in context) return { error: context.error };
+
+  const permissionError = assertPermission(context.role, 'manageContacts');
+  if (permissionError) return permissionError;
+
+  const { supabase, workspaceId } = context;
+
+  const { error } = await supabase
+    .from('leads')
+    .delete()
+    .in('id', leadIds)
+    .eq('workspace_id', workspaceId);
+
+  if (error) {
+    console.error('Error deleting leads:', error);
+    return { error: error.message };
+  }
+
+  revalidatePath('/lead-finder');
+  return { success: true, count: leadIds.length };
+}

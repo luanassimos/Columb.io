@@ -18,9 +18,10 @@ import {
   ChevronDown,
   ChevronsUpDown,
   ChevronUp,
-  X
+  X,
+  Trash2
 } from 'lucide-react';
-import { createLeadJob, importLeadsToContacts } from '@/app/actions/lead-finder';
+import { createLeadJob, importLeadsToContacts, deleteLeads } from '@/app/actions/lead-finder';
 import { WorkspaceRole } from '@/lib/permissions';
 
 interface Lead {
@@ -91,6 +92,7 @@ export default function LeadFinderClient({
 
   const [isCancelling, setIsCancelling] = useState(false);
   const [activeLead, setActiveLead] = useState<Lead | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const handleCancelCapture = async () => {
     if (!latestJob) return;
@@ -411,6 +413,45 @@ export default function LeadFinderClient({
       setImportError(res.error);
     } else {
       setImportSuccess(`${res.count} leads importados para seus Contatos com sucesso!`);
+      setSelectedIds(new Set());
+      router.refresh();
+    }
+  };
+
+  const handleDeleteSingleLead = async (leadId: string) => {
+    if (!confirm('Deseja realmente excluir este lead permanentemente?')) return;
+    
+    setIsDeleting(true);
+    const res = await deleteLeads([leadId]);
+    setIsDeleting(false);
+    
+    if (res.error) {
+      alert('Erro ao excluir lead: ' + res.error);
+    } else {
+      setActiveLead(null);
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(leadId);
+        return next;
+      });
+      router.refresh();
+    }
+  };
+
+  const handleDeleteBulkLeads = async () => {
+    const idsArray = Array.from(selectedIds);
+    if (idsArray.length === 0) return;
+    
+    if (!confirm(`Deseja realmente excluir os ${idsArray.length} leads selecionados permanentemente?`)) return;
+    
+    setIsDeleting(true);
+    setIsActionsOpen(false);
+    const res = await deleteLeads(idsArray);
+    setIsDeleting(false);
+    
+    if (res.error) {
+      alert('Erro ao excluir leads: ' + res.error);
+    } else {
       setSelectedIds(new Set());
       router.refresh();
     }
@@ -835,6 +876,15 @@ export default function LeadFinderClient({
                       <Download className="h-3.5 w-3.5 text-slate-500" />
                       Exportar CSV
                     </button>
+                    <button
+                      type="button"
+                      onClick={handleDeleteBulkLeads}
+                      disabled={isDeleting}
+                      className="w-full text-left px-3 py-2 text-xs text-rose-600 hover:bg-rose-50 transition-colors font-medium flex items-center gap-2 cursor-pointer border-t border-slate-100 disabled:opacity-50"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      Excluir Leads
+                    </button>
                   </div>
                 </>
               )}
@@ -1094,13 +1144,24 @@ export default function LeadFinderClient({
 
             {/* Modal Actions */}
             <div className="px-6 py-4 bg-slate-50 border-t border-[#D8E0EA] flex items-center justify-between gap-3">
-              <button
-                type="button"
-                onClick={() => setActiveLead(null)}
-                className="px-4 py-2 bg-white border border-[#D8E0EA] text-[#475569] hover:bg-slate-50 text-xs font-bold rounded-lg transition-all cursor-pointer"
-              >
-                Voltar
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveLead(null)}
+                  className="px-4 py-2 bg-white border border-[#D8E0EA] text-[#475569] hover:bg-slate-50 text-xs font-bold rounded-lg transition-all cursor-pointer"
+                >
+                  Voltar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDeleteSingleLead(activeLead.id)}
+                  disabled={isDeleting}
+                  className="px-4 py-2 bg-rose-50 border border-rose-200 text-rose-600 hover:bg-rose-100 disabled:opacity-50 text-xs font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Excluir Lead
+                </button>
+              </div>
               
               <a
                 href={
