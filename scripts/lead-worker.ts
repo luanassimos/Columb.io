@@ -50,7 +50,7 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey, {
 
 console.log('[Worker] Worker de captação de leads iniciado e aguardando tarefas...');
 
-async function runScraper(category: string, region: string, limitCount: number, onProgress: (count: number, lead: any) => Promise<void>) {
+async function runScraper(jobId: string, category: string, region: string, limitCount: number, onProgress: (count: number, lead: any) => Promise<void>) {
   console.log(`[Scraper] Iniciando Playwright para "${category}" em "${region}" (limite: ${limitCount})...`);
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({
@@ -113,6 +113,18 @@ async function runScraper(category: string, region: string, limitCount: number, 
 
   for (let i = 0; i < countToScrape; i++) {
     try {
+      // Check if job was cancelled
+      const { data: jobStatus } = await supabase
+        .from('lead_finder_jobs')
+        .select('status')
+        .eq('id', jobId)
+        .single();
+
+      if (jobStatus?.status === 'cancelled') {
+        console.log(`[Scraper] Job ${jobId} cancelado pelo usuário. Parando scraping...`);
+        break;
+      }
+
       console.log(`[Scraper] Carregando detalhes do card ${i + 1}/${countToScrape}...`);
       
       const card = cardsLocator.nth(i);
@@ -216,7 +228,7 @@ async function processQueue() {
     // 3. Execute Scraper
     try {
       let leadsSaved = 0;
-      await runScraper(job.category, job.region, job.limit_count, async (progress, lead) => {
+      await runScraper(job.id, job.category, job.region, job.limit_count, async (progress, lead) => {
         // Save the lead in database
         const { error: leadError } = await supabase.from('leads').insert({
           workspace_id: job.workspace_id,
@@ -245,16 +257,25 @@ async function processQueue() {
           .eq('id', job.id);
       });
 
-      // 4. Mark job as completed
-      await supabase
+      // 4. Mark job as completed only if it wasn't cancelled
+      const { data: finalJob } = await supabase
         .from('lead_finder_jobs')
-        .update({
-          status: 'completed',
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', job.id);
+        .select('status')
+        .eq('id', job.id)
+        .single();
 
-      console.log(`[Worker] Job ${job.id} finalizado com sucesso! ${leadsSaved} leads capturados.`);
+      if (finalJob?.status !== 'cancelled') {
+        await supabase
+          .from('lead_finder_jobs')
+          .update({
+            status: 'completed',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', job.id);
+        console.log(`[Worker] Job ${job.id} finalizado com sucesso! ${leadsSaved} leads capturados.`);
+      } else {
+        console.log(`[Worker] Job ${job.id} cancelado pelo usuário. Parando execução.`);
+      }
     } catch (scrapeError: any) {
       console.error(`[Worker] Falha ao executar scraping para o job ${job.id}:`, scrapeError);
       

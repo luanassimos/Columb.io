@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Target,
@@ -20,7 +20,7 @@ import {
   ChevronUp,
   X
 } from 'lucide-react';
-import { createLeadJob, getLatestJob, importLeadsToContacts } from '@/app/actions/lead-finder';
+import { createLeadJob, importLeadsToContacts } from '@/app/actions/lead-finder';
 import { WorkspaceRole } from '@/lib/permissions';
 
 interface Lead {
@@ -73,6 +73,46 @@ export default function LeadFinderClient({
   const [importSuccess, setImportSuccess] = useState<string | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
 
+  const [isCancelling, setIsCancelling] = useState(false);
+
+  const handleCancelCapture = async () => {
+    if (!latestJob) return;
+    if (!confirm('Deseja realmente cancelar esta captura de leads?')) return;
+
+    setIsCancelling(true);
+    try {
+      const response = await fetch('/api/lead-finder/cancel', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ jobId: latestJob.id }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setLatestJob((prev: any) => ({ ...prev, status: 'cancelled' }));
+          if (pollingRef.current) {
+            clearInterval(pollingRef.current);
+            pollingRef.current = null;
+          }
+          router.refresh();
+        } else {
+          alert('Erro ao cancelar captura: ' + (data.error || 'Erro desconhecido'));
+        }
+      } else {
+        const errData = await response.json();
+        alert('Erro ao cancelar captura: ' + (errData.error || response.statusText));
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert('Erro de conexão ao cancelar a captura.');
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
   // Table filter and sort
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('created_at');
@@ -83,24 +123,51 @@ export default function LeadFinderClient({
     setLatestJob(initialLatestJob);
   }, [initialLatestJob]);
 
+  const pollingRef = useRef<NodeJS.Timeout | null>(null);
+
   // Polling for pending or running jobs
   useEffect(() => {
     if (!latestJob) return;
-    if (latestJob.status !== 'pending' && latestJob.status !== 'running') return;
+    const isJobActive = latestJob.status === 'pending' || latestJob.status === 'running';
 
-    const interval = setInterval(async () => {
-      const res = await getLatestJob();
-      if (res.success && res.job) {
-        setLatestJob(res.job);
-        // If status completed or failed, stop polling and refresh data
-        if (res.job.status !== 'pending' && res.job.status !== 'running') {
-          clearInterval(interval);
-          router.refresh();
+    if (!isJobActive) {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+      return;
+    }
+
+    if (pollingRef.current) return; // Already polling
+
+    pollingRef.current = setInterval(async () => {
+      try {
+        const response = await fetch('/api/lead-finder/status');
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.job) {
+            setLatestJob(data.job);
+            // If status completed or failed, stop polling and refresh data
+            if (data.job.status !== 'pending' && data.job.status !== 'running') {
+              if (pollingRef.current) {
+                clearInterval(pollingRef.current);
+                pollingRef.current = null;
+              }
+              router.refresh();
+            }
+          }
         }
+      } catch (err) {
+        console.error('Erro no polling do status do job:', err);
       }
     }, 3000);
 
-    return () => clearInterval(interval);
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+    };
   }, [latestJob?.status, latestJob?.id, router]);
 
   const handleStartCapture = async (e: React.FormEvent) => {
@@ -127,9 +194,16 @@ export default function LeadFinderClient({
     } else {
       setCategory('');
       setRegion('');
-      const freshJob = await getLatestJob();
-      if (freshJob.success && freshJob.job) {
-        setLatestJob(freshJob.job);
+      try {
+        const response = await fetch('/api/lead-finder/status');
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.job) {
+            setLatestJob(data.job);
+          }
+        }
+      } catch (err) {
+        console.error(err);
       }
       router.refresh();
     }
@@ -398,6 +472,29 @@ export default function LeadFinderClient({
                       <AlertCircle className="h-3.5 w-3.5" />
                       Erro
                     </div>
+                  )}
+
+                  {latestJob.status === 'cancelled' && (
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-100 border border-slate-300 text-slate-600 text-xs font-bold">
+                      <X className="h-3.5 w-3.5" />
+                      Cancelado
+                    </div>
+                  )}
+
+                  {(latestJob.status === 'pending' || latestJob.status === 'running') && (
+                    <button
+                      type="button"
+                      onClick={handleCancelCapture}
+                      disabled={isCancelling}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 border border-rose-200 text-rose-600 hover:bg-rose-100 disabled:opacity-50 text-xs font-bold rounded-lg transition-all cursor-pointer"
+                    >
+                      {isCancelling ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <X className="h-3.5 w-3.5" />
+                      )}
+                      Cancelar Captura
+                    </button>
                   )}
                 </div>
               </div>

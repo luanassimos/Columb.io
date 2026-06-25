@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS public.lead_finder_jobs (
   region TEXT NOT NULL,
   limit_count INTEGER NOT NULL DEFAULT 10,
   progress_count INTEGER NOT NULL DEFAULT 0,
-  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'completed', 'failed')),
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'completed', 'failed', 'cancelled')),
   error_message TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -31,11 +31,13 @@ ALTER TABLE public.lead_finder_jobs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.leads ENABLE ROW LEVEL SECURITY;
 
 -- Policies
+DROP POLICY IF EXISTS "Lead finder jobs workspace member" ON public.lead_finder_jobs;
 CREATE POLICY "Lead finder jobs workspace member" ON public.lead_finder_jobs
   FOR ALL TO authenticated
   USING (public.is_workspace_member(workspace_id))
   WITH CHECK (public.is_workspace_member(workspace_id));
 
+DROP POLICY IF EXISTS "Leads workspace member" ON public.leads;
 CREATE POLICY "Leads workspace member" ON public.leads
   FOR ALL TO authenticated
   USING (public.is_workspace_member(workspace_id))
