@@ -173,7 +173,13 @@ async function runScraper(
 
       // 1. Extract name
       let name = (await card.getAttribute('aria-label'))?.trim() || '';
-      const container = page.locator('div.Nv2y1d, div.UaQhfb, div.role-feed-child, [role="feed"] > div').filter({ has: card }).first();
+      let container = card.locator('xpath=ancestor::div[contains(@class, "Nv2y1d") or contains(@class, "UaQhfb") or contains(@class, "bfka5c")][1]');
+      if (await container.count() === 0) {
+        container = card.locator('xpath=../..');
+      }
+      if (await container.count() === 0) {
+        container = card;
+      }
       
       if (!name) {
         name = (await container.locator('.qbfVoi, .fontHeadlineSmall, .fontBodyMedium').first().innerText().catch(() => '')) || '';
@@ -200,40 +206,57 @@ async function runScraper(
       let parsedCategory: string | null = null;
 
       try {
-        const cardText = await container.innerText().catch(() => '');
-        const lines = cardText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+        const lines: string[] = [];
         
+        // Add structured text lines from class W4Efsd first
+        const detailLocators = container.locator('.W4Efsd');
+        const detailCount = await detailLocators.count();
+        for (let j = 0; j < detailCount; j++) {
+          const txt = await detailLocators.nth(j).innerText().catch(() => '');
+          if (txt.trim()) lines.push(txt.trim());
+        }
+        
+        // Add all text content from container as fallback lines
+        const cardText = await container.innerText().catch(() => '');
+        cardText.split('\n').forEach(l => {
+          const trimmed = l.trim();
+          if (trimmed && !lines.includes(trimmed)) {
+            lines.push(trimmed);
+          }
+        });
+
         const isPhone = (str: string) => {
-          if (str.includes('(') && str.includes(')')) return true;
-          if (str.replace(/[^0-9]/g, '').length >= 8 && (str.includes('-') || str.includes(' '))) {
-            const letterCount = str.replace(/[^a-zA-Z]/g, '').length;
-            if (letterCount < 5) return true;
+          const clean = str.replace(/[^0-9+]/g, '');
+          if (clean.length >= 8 && clean.length <= 15) {
+            if (str.includes('(') && !str.includes(')')) return false; // partial rating
+            const letters = str.replace(/[^a-zA-Z]/g, '').length;
+            if (letters < 3) return true;
           }
           return false;
         };
 
         const isRating = (str: string) => {
-          return /^[345][.,]\d\s*\(\d+\)$/.test(str) || /^[345][.,]\d$/.test(str);
+          return /^[345][.,]\d\s*\(\d+\)$/.test(str) || /^[345][.,]\d$/.test(str) || (str.includes('(') && str.includes(')'));
         };
 
         const isAddress = (str: string) => {
-          const keywords = ['av', 'rua', 'r.', 'alameda', 'al.', 'rodovia', 'rod.', 'estrada', 'estr.', 'travessa', 'trv.', 'praça', 'prc.', 'avenida', 'bloco', 'nº', 'sala', 'andar', 'centro', 'bairro'];
+          const keywords = ['av', 'rua', 'r.', 'alameda', 'al.', 'rodovia', 'rod.', 'estrada', 'estr.', 'travessa', 'trv.', 'praça', 'prc.', 'avenida', 'bloco', 'nº', 'sala', 'andar', 'centro', 'bairro', 'cep', 'rj', 'sp', 'mg', 'rs', 'sc', 'pr', 'ba', 'pe', 'ce', 'df', 'go'];
           const lower = str.toLowerCase();
-          const hasKeyword = keywords.some(k => lower.includes(k));
+          const hasKeyword = keywords.some(k => lower.includes(k) || lower.split(/\s+/).includes(k));
           const hasComma = str.includes(',');
-          return (hasKeyword || hasComma) && str.length > 8 && !isPhone(str);
+          return (hasKeyword || hasComma) && str.length > 8 && !isPhone(str) && !isRating(str);
         };
 
         const isCategory = (str: string) => {
           if (str.length > 40) return false;
           if (/\d/.test(str)) return false;
           const lowercase = str.toLowerCase();
-          const excludes = ['aberto', 'fechado', 'fecha às', 'abre às', 'fechado temporariamente', 'atendimento', 'online', 'no local', 'website', 'direções', 'salvar', 'ligar', 'compartilhar'];
+          const excludes = ['aberto', 'fechado', 'fecha às', 'abre às', 'fechado temporariamente', 'atendimento', 'online', 'no local', 'website', 'direções', 'salvar', 'ligar', 'compartilhar', 'delivery', 'retirada'];
           if (excludes.some(e => lowercase.includes(e))) return false;
           return true;
         };
 
-        const uniqueLines = Array.from(new Set(lines)).filter(line => line !== name);
+        const uniqueLines = lines.filter(line => line !== name);
 
         for (const line of uniqueLines) {
           if (line.includes('·')) {
@@ -259,6 +282,24 @@ async function runScraper(
             }
           }
         }
+
+        // Fallback for address: select first line that is long enough and not phone, rating, category, or generic button text
+        if (!address) {
+          for (const line of uniqueLines) {
+            const lower = line.toLowerCase();
+            const excludes = ['aberto', 'fechado', 'fecha às', 'abre às', 'estrelas', 'avaliações', 'website', 'direções', 'salvar', 'ligar', 'compartilhar', 'delivery', 'retirada', 'online', 'no local'];
+            if (
+              line.length > 8 &&
+              !isPhone(line) &&
+              !isRating(line) &&
+              !isCategory(line) &&
+              !excludes.some(e => lower.includes(e))
+            ) {
+              address = line;
+              break;
+            }
+          }
+        }
       } catch (e) {
         // ignore
       }
@@ -277,9 +318,10 @@ async function runScraper(
         category: parsedCategory || category,
         lat: leadLat,
         lng: leadLng,
+        maps_url: href || null,
       };
 
-      console.log(`[Scraper] [Rápido] Extraído: "${lead.name}" | Fone: ${lead.phone || 'N/A'} | Web: ${lead.website || 'N/A'} | Geo: ${leadLat}, ${leadLng}`);
+      console.log(`[Scraper] [Rápido] Extraído: "${lead.name}" | Fone: ${lead.phone || 'N/A'} | Web: ${lead.website || 'N/A'} | Endereço: ${lead.address || 'N/A'} | Geo: ${leadLat}, ${leadLng}`);
       
       // Callback to save to DB and update progress
       await onProgress(i + 1, lead);
@@ -366,6 +408,7 @@ async function processQueue() {
             lat: lead.lat || null,
             lng: lead.lng || null,
             email: lead.email || null,
+            maps_url: lead.maps_url || null,
           });
 
         if (leadError) {
