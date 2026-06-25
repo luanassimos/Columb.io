@@ -64,6 +64,18 @@ export default function LeadFinderClient({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
+  // Advanced Geotargeted states
+  const [searchMode, setSearchMode] = useState<'region' | 'geo'>('region');
+  const [lat, setLat] = useState(-22.9068); // Default Rio de Janeiro
+  const [lng, setLng] = useState(-43.1729);
+  const [radius, setRadius] = useState(5000); // 5km in meters
+
+  // Map instances states
+  const [mapInstance, setMapInstance] = useState<any>(null);
+  const [markerInstance, setMarkerInstance] = useState<any>(null);
+  const [circleInstance, setCircleInstance] = useState<any>(null);
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+
   // Selection states
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isActionsOpen, setIsActionsOpen] = useState(false);
@@ -112,6 +124,104 @@ export default function LeadFinderClient({
       setIsCancelling(false);
     }
   };
+
+  // Inject Leaflet CSS dynamically on client mount
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!document.getElementById('leaflet-css')) {
+      const link = document.createElement('link');
+      link.id = 'leaflet-css';
+      link.rel = 'stylesheet';
+      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+      document.head.appendChild(link);
+    }
+  }, []);
+
+  // Initialize and remove map based on searchMode
+  useEffect(() => {
+    if (searchMode !== 'geo') return;
+    if (!mapContainerRef.current) return;
+
+    let map: any = null;
+    let marker: any = null;
+    let circle: any = null;
+
+    // Load Leaflet dynamically to avoid SSR errors
+    import('leaflet').then((L) => {
+      // Fix default marker icon path issue in Leaflet + NextJS
+      const DefaultIcon = L.Icon.Default.prototype as any;
+      delete DefaultIcon._getIconUrl;
+      L.Icon.Default.mergeOptions({
+        iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+        iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+        shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+      });
+
+      // Create map instance
+      map = L.map(mapContainerRef.current!).setView([lat, lng], 12);
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors',
+      }).addTo(map);
+
+      // Create marker and circle
+      marker = L.marker([lat, lng], { draggable: true }).addTo(map);
+      circle = L.circle([lat, lng], {
+        radius: radius,
+        color: '#2D6BFF',
+        fillColor: '#2D6BFF',
+        fillOpacity: 0.15,
+        weight: 1.5,
+      }).addTo(map);
+
+      // Update state on marker drag
+      marker.on('dragend', () => {
+        const position = marker.getLatLng();
+        setLat(position.lat);
+        setLng(position.lng);
+      });
+
+      // Update state and marker/circle on map click
+      map.on('click', (e: any) => {
+        const { lat: clickLat, lng: clickLng } = e.latlng;
+        setLat(clickLat);
+        setLng(clickLng);
+        marker.setLatLng(e.latlng);
+        circle.setLatLng(e.latlng);
+      });
+
+      // Save instances
+      setMapInstance(map);
+      setMarkerInstance(marker);
+      setCircleInstance(circle);
+    });
+
+    return () => {
+      if (map) {
+        map.remove();
+      }
+      setMapInstance(null);
+      setMarkerInstance(null);
+      setCircleInstance(null);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchMode]);
+
+  // Synchronize Leaflet map instances with React states
+  useEffect(() => {
+    if (!mapInstance) return;
+
+    if (markerInstance) {
+      markerInstance.setLatLng([lat, lng]);
+    }
+    if (circleInstance) {
+      circleInstance.setLatLng([lat, lng]);
+      circleInstance.setRadius(radius);
+    }
+    
+    // Smoothly pan map to new coordinates
+    mapInstance.panTo([lat, lng]);
+  }, [lat, lng, radius, mapInstance, markerInstance, circleInstance]);
 
   // Table filter and sort
   const [search, setSearch] = useState('');
@@ -176,16 +286,29 @@ export default function LeadFinderClient({
     setImportSuccess(null);
     setImportError(null);
 
-    if (!category.trim() || !region.trim()) {
-      setFormError('Por favor, preencha a Categoria e a Cidade/Região.');
+    if (!category.trim()) {
+      setFormError('Por favor, preencha a Categoria.');
+      return;
+    }
+
+    if (searchMode === 'region' && !region.trim()) {
+      setFormError('Por favor, preencha a Cidade ou Região.');
+      return;
+    }
+
+    if (searchMode === 'geo' && (isNaN(lat) || isNaN(lng))) {
+      setFormError('Por favor, forneça coordenadas geográficas válidas.');
       return;
     }
 
     setIsSubmitting(true);
     const result = await createLeadJob({
       category: category.trim(),
-      region: region.trim(),
+      region: searchMode === 'region' ? region.trim() : undefined,
       limitCount,
+      lat: searchMode === 'geo' ? lat : undefined,
+      lng: searchMode === 'geo' ? lng : undefined,
+      radius: searchMode === 'geo' ? radius : undefined,
     });
     setIsSubmitting(false);
 
@@ -370,18 +493,110 @@ export default function LeadFinderClient({
                 />
               </div>
 
-              {/* Region */}
+              {/* Mode Switcher */}
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-[#002B6A]">Cidade ou Região</label>
-                <input
-                  type="text"
-                  value={region}
-                  onChange={(e) => setRegion(e.target.value)}
-                  placeholder="ex: Rio de Janeiro, Barra da Tijuca"
-                  disabled={latestJob?.status === 'pending' || latestJob?.status === 'running'}
-                  className="w-full px-3.5 py-2.5 rounded-lg border border-[#D8E0EA] bg-[#F7FAFF] text-sm text-[#061A40] placeholder-[#475569]/50 focus:outline-none focus:border-[#2D6BFF] focus:bg-white transition-all disabled:opacity-50"
-                />
+                <label className="text-xs font-semibold text-[#002B6A]">Modo de Busca</label>
+                <div className="flex gap-2 p-1 bg-slate-100/70 rounded-lg">
+                  <button
+                    type="button"
+                    onClick={() => setSearchMode('region')}
+                    disabled={latestJob?.status === 'pending' || latestJob?.status === 'running'}
+                    className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-all cursor-pointer ${
+                      searchMode === 'region'
+                        ? 'bg-white text-[#002B6A] shadow-sm'
+                        : 'text-[#475569] hover:text-[#002B6A]'
+                    }`}
+                  >
+                    Região (Texto)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSearchMode('geo')}
+                    disabled={latestJob?.status === 'pending' || latestJob?.status === 'running'}
+                    className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-all cursor-pointer ${
+                      searchMode === 'geo'
+                        ? 'bg-white text-[#002B6A] shadow-sm'
+                        : 'text-[#475569] hover:text-[#002B6A]'
+                    }`}
+                  >
+                    Geolocalização (Mapa)
+                  </button>
+                </div>
               </div>
+
+              {/* Region (Only visible in region mode) */}
+              {searchMode === 'region' && (
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-[#002B6A]">Cidade ou Região</label>
+                  <input
+                    type="text"
+                    value={region}
+                    onChange={(e) => setRegion(e.target.value)}
+                    placeholder="ex: Rio de Janeiro, Barra da Tijuca"
+                    disabled={latestJob?.status === 'pending' || latestJob?.status === 'running'}
+                    className="w-full px-3.5 py-2.5 rounded-lg border border-[#D8E0EA] bg-[#F7FAFF] text-sm text-[#061A40] placeholder-[#475569]/50 focus:outline-none focus:border-[#2D6BFF] focus:bg-white transition-all disabled:opacity-50"
+                  />
+                </div>
+              )}
+
+              {/* Geolocalisation (Only visible in geo mode) */}
+              {searchMode === 'geo' && (
+                <div className="space-y-3">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-[#002B6A]">Selecione a área no mapa</label>
+                    <div 
+                      ref={mapContainerRef} 
+                      className="h-60 w-full rounded-lg border border-[#D8E0EA] bg-slate-50 overflow-hidden z-10" 
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-bold text-[#475569] uppercase">Latitude</span>
+                      <input
+                        type="number"
+                        step="any"
+                        value={lat}
+                        onChange={(e) => setLat(Number(e.target.value))}
+                        disabled={latestJob?.status === 'pending' || latestJob?.status === 'running'}
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-[#D8E0EA] bg-[#F7FAFF] text-xs text-[#061A40] focus:outline-none focus:border-[#2D6BFF] focus:bg-white transition-all disabled:opacity-50"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-bold text-[#475569] uppercase">Longitude</span>
+                      <input
+                        type="number"
+                        step="any"
+                        value={lng}
+                        onChange={(e) => setLng(Number(e.target.value))}
+                        disabled={latestJob?.status === 'pending' || latestJob?.status === 'running'}
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-[#D8E0EA] bg-[#F7FAFF] text-xs text-[#061A40] focus:outline-none focus:border-[#2D6BFF] focus:bg-white transition-all disabled:opacity-50"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1 pt-1">
+                    <div className="flex justify-between text-xs font-semibold text-[#002B6A]">
+                      <span>Raio de Busca</span>
+                      <span className="text-[#2D6BFF] font-bold">{(radius / 1000).toFixed(0)} km</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="1000"
+                      max="20000"
+                      step="1000"
+                      value={radius}
+                      onChange={(e) => setRadius(Number(e.target.value))}
+                      disabled={latestJob?.status === 'pending' || latestJob?.status === 'running'}
+                      className="w-full h-1 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-[#2D6BFF] disabled:opacity-50"
+                    />
+                    <div className="flex justify-between text-[9px] text-[#475569]/85">
+                      <span>1 km</span>
+                      <span>20 km</span>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Limit results */}
               <div className="space-y-1.5">

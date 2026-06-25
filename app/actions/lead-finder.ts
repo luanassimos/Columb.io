@@ -7,8 +7,11 @@ import { revalidatePath } from 'next/cache';
 
 export interface CreateLeadJobInput {
   category: string;
-  region: string;
+  region?: string;
   limitCount: number;
+  lat?: number;
+  lng?: number;
+  radius?: number; // in meters
 }
 
 export async function createLeadJob(input: CreateLeadJobInput) {
@@ -43,10 +46,13 @@ export async function createLeadJob(input: CreateLeadJobInput) {
     .insert({
       workspace_id: workspaceId,
       category: input.category.trim(),
-      region: input.region.trim(),
+      region: input.region ? input.region.trim() : null,
       limit_count: input.limitCount,
       progress_count: 0,
       status: 'pending',
+      lat: input.lat !== undefined ? input.lat : null,
+      lng: input.lng !== undefined ? input.lng : null,
+      radius: input.radius !== undefined ? input.radius : null,
     })
     .select('id')
     .single();

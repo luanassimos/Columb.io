@@ -44,14 +44,42 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey, {
     autoRefreshToken: false,
   },
   realtime: {
-    transport: ws,
+    transport: ws as any,
   },
 });
 
 console.log('[Worker] Worker de captação de leads iniciado e aguardando tarefas...');
 
-async function runScraper(jobId: string, category: string, region: string, limitCount: number, onProgress: (count: number, lead: any) => Promise<void>) {
-  console.log(`[Scraper] Iniciando Playwright para "${category}" em "${region}" (limite: ${limitCount})...`);
+async function runScraper(
+  jobId: string,
+  category: string,
+  region: string | null,
+  limitCount: number,
+  lat: number | null,
+  lng: number | null,
+  radius: number | null,
+  onProgress: (count: number, lead: any) => Promise<void>
+) {
+  let url = '';
+  if (lat !== null && lng !== null) {
+    let zoom = 12;
+    if (radius) {
+      const radiusKm = radius / 1000;
+      if (radiusKm <= 1.5) zoom = 15;
+      else if (radiusKm <= 3.5) zoom = 14;
+      else if (radiusKm <= 7.5) zoom = 13;
+      else if (radiusKm <= 15) zoom = 12;
+      else zoom = 11;
+    }
+    console.log(`[Scraper] Iniciando Playwright para "${category}" em Geo: ${lat}, ${lng} (raio: ${radius ? radius / 1000 : '?'}km, zoom: ${zoom}, limite: ${limitCount})...`);
+    const searchQuery = encodeURIComponent(category);
+    url = `https://www.google.com/maps/search/${searchQuery}/@${lat},${lng},${zoom}z`;
+  } else {
+    console.log(`[Scraper] Iniciando Playwright para "${category}" em "${region || ''}" (limite: ${limitCount})...`);
+    const searchQuery = encodeURIComponent(`${category} ${region || ''}`);
+    url = `https://www.google.com/maps/search/${searchQuery}`;
+  }
+
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({
     locale: 'pt-BR',
@@ -62,8 +90,6 @@ async function runScraper(jobId: string, category: string, region: string, limit
   // Set viewport size
   await page.setViewportSize({ width: 1280, height: 800 });
 
-  const searchQuery = encodeURIComponent(`${category} ${region}`);
-  const url = `https://www.google.com/maps/search/${searchQuery}`;
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
 
   console.log('[Scraper] Página do Google Maps carregada. Rolando feed...');
@@ -228,18 +254,28 @@ async function processQueue() {
     // 3. Execute Scraper
     try {
       let leadsSaved = 0;
-      await runScraper(job.id, job.category, job.region, job.limit_count, async (progress, lead) => {
-        // Save the lead in database
-        const { error: leadError } = await supabase.from('leads').insert({
-          workspace_id: job.workspace_id,
-          job_id: job.id,
-          name: lead.name,
-          phone: lead.phone,
-          address: lead.address,
-          website: lead.website,
-          category: job.category,
-          region: job.region,
-        });
+      const leadRegion = job.region || `Geo: ${Number(job.lat).toFixed(4)}, ${Number(job.lng).toFixed(4)} (${(Number(job.radius) / 1000).toFixed(0)}km)`;
+
+      await runScraper(
+        job.id,
+        job.category,
+        job.region,
+        job.limit_count,
+        job.lat,
+        job.lng,
+        job.radius,
+        async (progress, lead) => {
+          // Save the lead in database
+          const { error: leadError } = await supabase.from('leads').insert({
+            workspace_id: job.workspace_id,
+            job_id: job.id,
+            name: lead.name,
+            phone: lead.phone,
+            address: lead.address,
+            website: lead.website,
+            category: job.category,
+            region: leadRegion,
+          });
 
         if (leadError) {
           console.error(`[Worker] Erro ao salvar lead "${lead.name}":`, leadError);
