@@ -48,7 +48,7 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey, {
   },
 });
 
-console.log('[Worker] Worker de captação de leads iniciado e aguardando tarefas...');
+console.log('WORKER_LEADS_STARTED');
 
 async function runScraper(
   jobId: string,
@@ -120,15 +120,18 @@ async function runScraper(
     }
 
     previousCount = currentCount;
-    const feed = page.locator(feedSelector);
-    if (await feed.count() > 0) {
-      await feed.first().evaluate((node) => node.scrollBy(0, node.scrollHeight));
-      await page.waitForTimeout(1000);
-    } else {
-      // Fallback if role="feed" is not matching
-      await page.evaluate(() => window.scrollBy(0, window.innerHeight));
-      await page.waitForTimeout(1000);
+    try {
+      const cards = page.locator('a[href*="/maps/place/"]');
+      const cardsCount = await cards.count();
+      if (cardsCount > 0) {
+        await cards.last().scrollIntoViewIfNeeded();
+      } else {
+        await page.keyboard.press('PageDown');
+      }
+    } catch (scrollErr) {
+      console.warn('[Scraper] Erro ao rolar página:', scrollErr);
     }
+    await page.waitForTimeout(1000);
     scrollAttempts++;
   }
 
@@ -168,33 +171,38 @@ async function runScraper(
         }
       }
 
-      // Extract details directly from the search result card in the list
-      const leadData = await card.evaluate((cardEl) => {
-        let name = cardEl.getAttribute('aria-label') || '';
+      // 1. Extract name
+      let name = (await card.getAttribute('aria-label'))?.trim() || '';
+      const container = page.locator('div.Nv2y1d, div.UaQhfb, div.role-feed-child, [role="feed"] > div').filter({ has: card }).first();
+      
+      if (!name) {
+        name = (await container.locator('.qbfVoi, .fontHeadlineSmall, .fontBodyMedium').first().innerText().catch(() => '')) || '';
         name = name.trim();
+      }
+      if (!name) {
+        name = `Empresa ${i + 1}`;
+      }
 
-        // The card is a link, look for its main container in the feed list
-        const container = cardEl.closest('.Nv2y1d') || cardEl.parentElement?.parentElement || cardEl;
-
-        if (!name) {
-          const titleEl = container.querySelector('.qbfVoi, .fontHeadlineSmall, .fontBodyMedium');
-          if (titleEl) {
-            name = titleEl.textContent || '';
-          }
+      // 2. Extract Website
+      let website: string | null = null;
+      try {
+        const webLink = container.locator('a[aria-label*="Website"], a[aria-label*="website"], a[data-value="Website"], a[href^="http"]:not([href*="google.com"])').first();
+        if (await webLink.count() > 0) {
+          website = await webLink.getAttribute('href');
         }
+      } catch (e) {
+        // ignore
+      }
 
-        // Find Website button/anchor inside the card container
-        let website = null;
-        const webLink = container.querySelector('a[aria-label*="Website"], a[aria-label*="website"], a[data-value="Website"], a[href^="http"]:not([href*="google.com"])');
-        if (webLink) {
-          website = webLink.getAttribute('href');
-        }
+      // 3. Extract address, phone, and category by parsing card inner texts on Node-side
+      let phone: string | null = null;
+      let address: string | null = null;
+      let parsedCategory: string | null = null;
 
-        // Parse phone, address, and category from card text elements
-        let phone = null;
-        let address = null;
-        let category = null;
-
+      try {
+        const cardText = await container.innerText().catch(() => '');
+        const lines = cardText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+        
         const isPhone = (str: string) => {
           if (str.includes('(') && str.includes(')')) return true;
           if (str.replace(/[^0-9]/g, '').length >= 8 && (str.includes('-') || str.includes(' '))) {
@@ -225,25 +233,11 @@ async function runScraper(
           return true;
         };
 
-        // Extract text elements inside the card
-        const textElements = Array.from(container.querySelectorAll('.W4E25c, .fontBodyMedium, div, span'))
-          .map(el => el.textContent?.trim() || '')
-          .filter(t => t.length > 0);
+        const uniqueLines = Array.from(new Set(lines)).filter(line => line !== name);
 
-        const uniqueTexts = [];
-        const seen = new Set();
-        for (const txt of textElements) {
-          if (txt === name) continue;
-          if (!seen.has(txt)) {
-            seen.add(txt);
-            uniqueTexts.push(txt);
-          }
-        }
-
-        // Try to match fields
-        for (const txt of uniqueTexts) {
-          if (txt.includes('·')) {
-            const parts = txt.split('·').map(p => p.trim());
+        for (const line of uniqueLines) {
+          if (line.includes('·')) {
+            const parts = line.split('·').map(p => p.trim());
             for (const part of parts) {
               if (isPhone(part)) {
                 phone = part;
@@ -252,30 +246,35 @@ async function runScraper(
               } else if (isAddress(part)) {
                 address = part;
               } else if (isCategory(part)) {
-                category = part;
+                parsedCategory = part;
               }
             }
           } else {
-            if (isPhone(txt)) {
-              phone = txt;
-            } else if (isAddress(txt)) {
-              address = txt;
-            } else if (isCategory(txt)) {
-              category = txt;
+            if (isPhone(line)) {
+              phone = line;
+            } else if (isAddress(line)) {
+              address = line;
+            } else if (isCategory(line)) {
+              parsedCategory = line;
             }
           }
         }
+      } catch (e) {
+        // ignore
+      }
 
-        return { name, website, phone, address, category };
-      });
+      // 4. Fallback search for address if not found
+      if (!address) {
+        address = await container.locator("[data-value], .W4Efsd").first().innerText().catch(() => null);
+      }
 
       const lead = {
-        name: leadData.name || `Empresa ${i + 1}`,
-        phone: leadData.phone || null,
-        address: leadData.address || null,
-        website: leadData.website || null,
+        name,
+        phone: phone || null,
+        address: address || null,
+        website: website || null,
         email: null, // Scraped emails are not fetched in this phase
-        category: leadData.category || category,
+        category: parsedCategory || category,
         lat: leadLat,
         lng: leadLng,
       };
@@ -298,25 +297,36 @@ async function runScraper(
 
 async function processQueue() {
   try {
-    // 1. Fetch one pending job
-    const { data: job, error } = await supabase
+    console.log("FETCHING JOBS");
+    const { data: jobs, error } = await supabase
       .from('lead_finder_jobs')
       .select('*')
       .eq('status', 'pending')
       .order('created_at', { ascending: true })
-      .limit(1)
-      .maybeSingle();
+      .limit(5);
 
     if (error) {
       console.error('[Worker] Erro ao buscar fila de jobs:', error);
       return;
     }
 
-    if (!job) {
+    const jobsList = jobs || [];
+    console.log("JOBS FOUND:", jobsList.length);
+    if (jobsList.length > 0) {
+      console.log("JOB SAMPLE:", jobsList[0]);
+    }
+
+    if (jobsList.length === 0) {
       return; // No pending jobs
     }
 
-    console.log(`[Worker] Job encontrado! ID: ${job.id} | Categoria: "${job.category}" | Região: "${job.region}"`);
+    const job = jobsList[0];
+
+    console.log("PROCESSING JOB:", job.id);
+    console.log("CATEGORY:", job.category);
+    console.log("LAT:", job.lat);
+    console.log("LNG:", job.lng);
+    console.log("RADIUS:", job.radius);
 
     // 2. Set job status to running
     const { error: startError } = await supabase
