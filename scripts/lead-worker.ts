@@ -339,7 +339,6 @@ async function runScraper(
 
 async function processQueue() {
   try {
-    console.log("FETCHING JOBS");
     const { data: jobs, error } = await supabase
       .from('lead_finder_jobs')
       .select('*')
@@ -353,10 +352,6 @@ async function processQueue() {
     }
 
     const jobsList = jobs || [];
-    console.log("JOBS FOUND:", jobsList.length);
-    if (jobsList.length > 0) {
-      console.log("JOB SAMPLE:", jobsList[0]);
-    }
 
     if (jobsList.length === 0) {
       return; // No pending jobs

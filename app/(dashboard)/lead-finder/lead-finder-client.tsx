@@ -19,7 +19,8 @@ import {
   ChevronsUpDown,
   ChevronUp,
   X,
-  Trash2
+  Trash2,
+  Info
 } from 'lucide-react';
 import { createLeadJob, importLeadsToContacts, deleteLeads } from '@/app/actions/lead-finder';
 import { WorkspaceRole } from '@/lib/permissions';
@@ -48,6 +49,17 @@ interface LeadFinderClientProps {
 type SortKey = 'name' | 'phone' | 'website' | 'address' | 'created_at';
 type SortDir = 'asc' | 'desc';
 
+const SUGGESTED_CATEGORIES = [
+  "Restaurante", "Restaurant", "Foodtruck", "Food Truck", "Advogado", "Lawyer",
+  "Clínica Odontológica", "Dentista", "Dentist", "Imobiliária", "Real Estate",
+  "Salão de Beleza", "Beauty Salon", "Academia", "Gym", "Cafeteria", "Coffee Shop",
+  "Hamburgueria", "Burger Joint", "Pizzaria", "Pizzeria", "Hotel", "Petshop",
+  "Pet Shop", "Oficina Mecânica", "Auto Repair", "Contabilidade", "Accountant",
+  "Clínica Médica", "Medical Clinic", "Clínica de Estética", "Spa", "Escola",
+  "School", "Coworking", "Agência de Marketing", "Marketing Agency", "Padaria",
+  "Bakery", "Farmácia", "Pharmacy", "Floricultura", "Florist"
+];
+
 export default function LeadFinderClient({
   initialLatestJob,
   initialLeads,
@@ -65,6 +77,25 @@ export default function LeadFinderClient({
   // Form states
   const [category, setCategory] = useState('');
   const [region, setRegion] = useState('');
+  const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsCategoryDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  const filteredCategories = SUGGESTED_CATEGORIES.filter((cat) =>
+    cat.toLowerCase().includes(category.toLowerCase())
+  );
   const [limitCount, setLimitCount] = useState(10);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -93,6 +124,8 @@ export default function LeadFinderClient({
   const [isCancelling, setIsCancelling] = useState(false);
   const [activeLead, setActiveLead] = useState<Lead | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showFormOverride, setShowFormOverride] = useState(false);
+  const [showTerminalInfo, setShowTerminalInfo] = useState(false);
 
   const handleCancelCapture = async () => {
     if (!latestJob) return;
@@ -324,6 +357,7 @@ export default function LeadFinderClient({
     } else {
       setCategory('');
       setRegion('');
+      setShowFormOverride(false);
       try {
         const response = await fetch('/api/lead-finder/status');
         if (response.ok) {
@@ -503,22 +537,46 @@ export default function LeadFinderClient({
     </button>
   );
 
+  const isJobActive = latestJob && (latestJob.status === 'pending' || latestJob.status === 'running');
+  const isJobFinished = latestJob && (latestJob.status === 'completed' || latestJob.status === 'failed' || latestJob.status === 'cancelled');
+
+  let currentStage: 'form' | 'status' | 'result' = 'form';
+  if (isJobActive) {
+    currentStage = 'status';
+  } else if (isJobFinished && !showFormOverride) {
+    currentStage = 'result';
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-extrabold tracking-tight text-[#002B6A] flex items-center gap-2">
-          <Target className="h-8 w-8 text-[#2D6BFF]" />
-          Captar Leads
-        </h1>
-        <p className="text-sm text-[#475569] mt-1">
-          Capte contatos empresariais de forma automatizada por categoria de serviço e região geográfica.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-extrabold tracking-tight text-[#002B6A] flex items-center gap-2">
+            <Target className="h-8 w-8 text-[#2D6BFF]" />
+            Captar Leads
+          </h1>
+          <p className="text-sm text-[#475569] mt-1">
+            Capte contatos empresariais de forma automatizada por categoria de serviço e região geográfica.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowTerminalInfo(prev => !prev)}
+          className={`p-2 rounded-xl border transition-all cursor-pointer shrink-0 ${
+            showTerminalInfo
+              ? 'bg-[#EAF2FF] border-[#2D6BFF] text-[#2D6BFF] shadow-sm'
+              : 'bg-white border-[#D8E0EA] text-[#475569] hover:bg-slate-50'
+          }`}
+          title="Executar Worker Local"
+        >
+          <Info className="h-5 w-5" />
+        </button>
       </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column: Form Card */}
-        <div className="lg:col-span-1 space-y-6">
+      
+      {/* Stages Panel (Form, Status, or Result) */}
+      <div className="transition-all duration-300">
+        {currentStage === 'form' && (
           <div className="bg-white rounded-2xl border border-[#D8E0EA] p-6 shadow-sm">
             <h3 className="text-lg font-bold text-[#002B6A] mb-4 flex items-center gap-2">
               <Search className="h-4.5 w-4.5 text-[#2D6BFF]" />
@@ -527,16 +585,39 @@ export default function LeadFinderClient({
 
             <form onSubmit={handleStartCapture} className="space-y-4">
               {/* Category */}
-              <div className="space-y-1.5">
+              <div className="space-y-1.5 relative" ref={dropdownRef}>
                 <label className="text-xs font-semibold text-[#002B6A]">Categoria / Nicho</label>
                 <input
                   type="text"
                   value={category}
-                  onChange={(e) => setCategory(e.target.value)}
+                  onChange={(e) => {
+                    setCategory(e.target.value);
+                    setIsCategoryDropdownOpen(true);
+                  }}
+                  onFocus={() => setIsCategoryDropdownOpen(true)}
                   placeholder="ex: advogado, clínica odontológica, restaurante"
                   disabled={latestJob?.status === 'pending' || latestJob?.status === 'running'}
                   className="w-full px-3.5 py-2.5 rounded-lg border border-[#D8E0EA] bg-[#F7FAFF] text-sm text-[#061A40] placeholder-[#475569]/50 focus:outline-none focus:border-[#2D6BFF] focus:bg-white transition-all disabled:opacity-50"
                 />
+                
+                {/* Autocomplete Dropdown list */}
+                {isCategoryDropdownOpen && filteredCategories.length > 0 && (
+                  <div className="absolute left-0 right-0 mt-1 max-h-60 overflow-y-auto bg-white border border-[#D8E0EA] rounded-xl shadow-lg z-50 py-1.5 animate-fade-in scrollbar-thin">
+                    {filteredCategories.map((cat) => (
+                      <button
+                        key={cat}
+                        type="button"
+                        onClick={() => {
+                          setCategory(cat);
+                          setIsCategoryDropdownOpen(false);
+                        }}
+                        className="w-full text-left px-4 py-2 text-xs text-[#061A40] hover:bg-[#EAF2FF] hover:text-[#002B6A] transition-colors font-medium cursor-pointer"
+                      >
+                        {cat}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Mode Switcher */}
@@ -668,12 +749,8 @@ export default function LeadFinderClient({
 
               <button
                 type="submit"
-                disabled={
-                  isSubmitting ||
-                  latestJob?.status === 'pending' ||
-                  latestJob?.status === 'running'
-                }
-                className="w-full py-2.5 rounded-lg text-sm font-semibold text-white bg-[#2D6BFF] hover:bg-[#1b58ec] disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 shadow-sm"
+                disabled={isSubmitting}
+                className="w-full py-2.5 rounded-lg text-sm font-semibold text-white bg-[#2D6BFF] hover:bg-[#1b58ec] disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 shadow-sm cursor-pointer"
               >
                 {isSubmitting ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -684,130 +761,147 @@ export default function LeadFinderClient({
               </button>
             </form>
           </div>
-        </div>
+        )}
 
-        {/* Right Column: Status Panel & Developer Terminal Guide */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Status Panel Card */}
-          {latestJob && (
-            <div className="bg-white rounded-2xl border border-[#D8E0EA] p-6 shadow-sm">
-              <h3 className="text-lg font-bold text-[#002B6A] mb-4">Status do Último Captador</h3>
+        {currentStage === 'status' && latestJob && (
+          <div className="bg-white rounded-2xl border border-[#D8E0EA] p-6 shadow-sm">
+            <h3 className="text-lg font-bold text-[#002B6A] mb-4">Captura de Leads em Andamento</h3>
 
-              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 p-4 rounded-xl border border-slate-100 bg-slate-50/50">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-[#475569] uppercase tracking-wider">Busca:</span>
-                    <span className="text-sm font-bold text-[#002B6A]">
-                      &quot;{latestJob.category}&quot; em &quot;{latestJob.region}&quot;
-                    </span>
-                  </div>
-                  <div className="text-xs text-[#475569]">
-                    Criado em: {new Date(latestJob.created_at).toLocaleString('pt-BR')}
-                  </div>
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 p-4 rounded-xl border border-slate-100 bg-slate-50/50">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-[#475569] uppercase tracking-wider">Busca:</span>
+                  <span className="text-sm font-bold text-[#002B6A]">
+                    &quot;{latestJob.category}&quot; {latestJob.region ? `em "${latestJob.region}"` : `via Geolocalização`}
+                  </span>
                 </div>
-
-                <div className="flex items-center gap-3">
-                  {latestJob.status === 'pending' && (
-                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-50 border border-blue-200 text-blue-600 text-xs font-bold animate-pulse">
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      Pendente
-                    </div>
-                  )}
-
-                  {latestJob.status === 'running' && (
-                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-50 border border-amber-200 text-amber-600 text-xs font-bold">
-                      <div className="h-2 w-2 rounded-full bg-amber-500 animate-ping" />
-                      Executando ({latestJob.progress_count} / {latestJob.limit_count})
-                    </div>
-                  )}
-
-                  {latestJob.status === 'completed' && (
-                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-600 text-xs font-bold">
-                      <CheckCircle className="h-3.5 w-3.5" />
-                      Finalizado ({latestJob.progress_count})
-                    </div>
-                  )}
-
-                  {latestJob.status === 'failed' && (
-                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-rose-50 border border-rose-200 text-rose-600 text-xs font-bold">
-                      <AlertCircle className="h-3.5 w-3.5" />
-                      Erro
-                    </div>
-                  )}
-
-                  {latestJob.status === 'cancelled' && (
-                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-100 border border-slate-300 text-slate-600 text-xs font-bold">
-                      <X className="h-3.5 w-3.5" />
-                      Cancelado
-                    </div>
-                  )}
-
-                  {(latestJob.status === 'pending' || latestJob.status === 'running') && (
-                    <button
-                      type="button"
-                      onClick={handleCancelCapture}
-                      disabled={isCancelling}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 border border-rose-200 text-rose-600 hover:bg-rose-100 disabled:opacity-50 text-xs font-bold rounded-lg transition-all cursor-pointer"
-                    >
-                      {isCancelling ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <X className="h-3.5 w-3.5" />
-                      )}
-                      Cancelar Captura
-                    </button>
-                  )}
+                <div className="text-xs text-[#475569]">
+                  Criado em: {new Date(latestJob.created_at).toLocaleString('pt-BR')}
                 </div>
               </div>
 
-              {latestJob.status === 'failed' && latestJob.error_message && (
-                <div className="mt-3 p-3 bg-rose-50 border border-rose-100 rounded-lg text-xs text-rose-600 font-medium">
-                  <strong>Erro:</strong> {latestJob.error_message}
+              <div className="flex items-center gap-3">
+                {latestJob.status === 'pending' && (
+                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-50 border border-blue-200 text-blue-600 text-xs font-bold animate-pulse">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Pendente
+                  </div>
+                )}
+
+                {latestJob.status === 'running' && (
+                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-50 border border-amber-200 text-amber-600 text-xs font-bold">
+                    <div className="h-2 w-2 rounded-full bg-amber-500 animate-ping" />
+                    Executando ({latestJob.progress_count} / {latestJob.limit_count})
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={handleCancelCapture}
+                  disabled={isCancelling}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 border border-rose-200 text-rose-600 hover:bg-rose-100 disabled:opacity-50 text-xs font-bold rounded-lg transition-all cursor-pointer"
+                >
+                  {isCancelling ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <X className="h-3.5 w-3.5" />
+                  )}
+                  Cancelar Captura
+                </button>
+              </div>
+            </div>
+
+            {/* Progress bar for running */}
+            {latestJob.status === 'running' && (
+              <div className="mt-4 space-y-1">
+                <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                  <div
+                    className="bg-[#2D6BFF] h-2 transition-all duration-500 rounded-full"
+                    style={{
+                      width: `${Math.min(
+                        100,
+                        (latestJob.progress_count / latestJob.limit_count) * 100
+                      )}%`,
+                    }}
+                  />
+                </div>
+                <div className="text-right text-[10px] text-[#475569] font-medium">
+                  {Math.round((latestJob.progress_count / latestJob.limit_count) * 100)}% concluído
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {currentStage === 'result' && latestJob && (
+          <div className="bg-white rounded-2xl border border-[#D8E0EA] p-6 shadow-sm space-y-4">
+            <div className="flex items-center gap-3">
+              {latestJob.status === 'completed' && (
+                <div className="h-10 w-10 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center">
+                  <CheckCircle className="h-6 w-6" />
                 </div>
               )}
+              {latestJob.status === 'failed' && (
+                <div className="h-10 w-10 rounded-full bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center">
+                  <AlertCircle className="h-6 w-6" />
+                </div>
+              )}
+              {latestJob.status === 'cancelled' && (
+                <div className="h-10 w-10 rounded-full bg-slate-50 border border-slate-200 text-slate-600 flex items-center justify-center">
+                  <X className="h-6 w-6" />
+                </div>
+              )}
+              <div>
+                <h3 className="text-lg font-bold text-[#002B6A]">
+                  {latestJob.status === 'completed' && 'Captura Concluída com Sucesso!'}
+                  {latestJob.status === 'failed' && 'Erro durante a Captura'}
+                  {latestJob.status === 'cancelled' && 'Captura Cancelada'}
+                </h3>
+                <p className="text-xs text-[#475569]">
+                  Busca: &quot;{latestJob.category}&quot; {latestJob.region ? `em "${latestJob.region}"` : `via Geolocalização`}
+                </p>
+              </div>
+            </div>
 
-              {/* Progress bar for running */}
-              {latestJob.status === 'running' && (
-                <div className="mt-4 space-y-1">
-                  <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-                    <div
-                      className="bg-[#2D6BFF] h-2 transition-all duration-500 rounded-full"
-                      style={{
-                        width: `${Math.min(
-                          100,
-                          (latestJob.progress_count / latestJob.limit_count) * 100
-                        )}%`,
-                      }}
-                    />
-                  </div>
-                  <div className="text-right text-[10px] text-[#475569] font-medium">
-                    {Math.round((latestJob.progress_count / latestJob.limit_count) * 100)}% concluído
-                  </div>
+            <div className="p-4 rounded-xl border border-slate-100 bg-slate-50/50 space-y-2">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+                <div>
+                  <span className="block text-[#475569] font-medium">Status</span>
+                  <span className="font-bold text-[#002B6A] capitalize">{latestJob.status}</span>
+                </div>
+                <div>
+                  <span className="block text-[#475569] font-medium">Leads Extraídos</span>
+                  <span className="font-bold text-[#002B6A]">{latestJob.progress_count}</span>
+                </div>
+                <div>
+                  <span className="block text-[#475569] font-medium">Limite Solicitado</span>
+                  <span className="font-bold text-[#002B6A]">{latestJob.limit_count}</span>
+                </div>
+                <div>
+                  <span className="block text-[#475569] font-medium">Duração / Fim</span>
+                  <span className="font-bold text-[#002B6A]">{new Date(latestJob.updated_at).toLocaleTimeString('pt-BR')}</span>
+                </div>
+              </div>
+              
+              {latestJob.status === 'failed' && latestJob.error_message && (
+                <div className="mt-2 text-rose-600 text-xs font-semibold">
+                  Erro: {latestJob.error_message}
                 </div>
               )}
             </div>
-          )}
 
-          {/* Dev Terminal Instruction Card (Glassmorphic Terminal Style) */}
-          <div className="bg-[#061A40] text-blue-100 rounded-2xl p-6 shadow-xl relative overflow-hidden border border-blue-900">
-            <div className="absolute right-0 top-0 translate-x-1/3 -translate-y-1/3 w-40 h-40 bg-blue-500/10 rounded-full blur-2xl pointer-events-none" />
-            
-            <h3 className="text-sm font-bold text-white mb-2.5 flex items-center gap-2">
-              <Terminal className="h-4 w-4 text-[#2D6BFF]" />
-              Executar Worker Local (Scraper)
-            </h3>
-            
-            <p className="text-xs text-blue-200/80 mb-4 leading-relaxed">
-              O scraping utiliza o navegador local para não sobrecarregar as serverless functions.
-              Certifique-se de que o worker local está rodando em sua máquina para processar a busca:
-            </p>
-
-            <div className="bg-black/45 rounded-lg p-3 border border-blue-950 font-mono text-xs text-emerald-400 select-all flex items-center justify-between">
-              <span>npm run worker:leads</span>
-              <span className="text-[10px] text-[#475569] select-none">Comando Terminal</span>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setShowFormOverride(true)}
+                className="px-4 py-2.5 rounded-lg text-sm font-semibold text-white bg-[#2D6BFF] hover:bg-[#1b58ec] transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
+              >
+                <Sparkles className="h-4 w-4" />
+                Iniciar Nova Captura
+              </button>
             </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Import / Error Alerts */}
@@ -1028,6 +1122,28 @@ export default function LeadFinderClient({
           Mostrando {filtered.length} de {leads.length} leads capturados
         </div>
       </div>
+
+      {/* Dev Terminal Instruction Card (Glassmorphic Terminal Style) */}
+      {showTerminalInfo && (
+        <div className="bg-[#061A40] text-blue-100 rounded-2xl p-6 shadow-xl relative overflow-hidden border border-blue-900 mt-6 animate-fade-in">
+          <div className="absolute right-0 top-0 translate-x-1/3 -translate-y-1/3 w-40 h-40 bg-blue-500/10 rounded-full blur-2xl pointer-events-none" />
+          
+          <h3 className="text-sm font-bold text-white mb-2.5 flex items-center gap-2">
+            <Terminal className="h-4 w-4 text-[#2D6BFF]" />
+            Executar Worker Local (Scraper)
+          </h3>
+          
+          <p className="text-xs text-blue-200/80 mb-4 leading-relaxed">
+            O scraping utiliza o navegador local para não sobrecarregar as serverless functions.
+            Certifique-se de que o worker local está rodando em sua máquina para processar a busca:
+          </p>
+
+          <div className="bg-black/45 rounded-lg p-3 border border-blue-950 font-mono text-xs text-emerald-400 select-all flex items-center justify-between">
+            <span>npm run worker:leads</span>
+            <span className="text-[10px] text-[#475569] select-none">Comando Terminal</span>
+          </div>
+        </div>
+      )}
       {/* Lead Details Modal */}
       {activeLead && (
         <div className="fixed inset-0 bg-[#061A40]/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
