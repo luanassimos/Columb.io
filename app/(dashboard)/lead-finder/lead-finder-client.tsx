@@ -108,7 +108,6 @@ export default function LeadFinderClient({
   const [formError, setFormError] = useState<string | null>(null);
 
   // Advanced Geotargeted states
-  const [searchMode, setSearchMode] = useState<'region' | 'geo'>('region');
   const [lat, setLat] = useState(-22.9068); // Default Rio de Janeiro
   const [lng, setLng] = useState(-43.1729);
   const [radius, setRadius] = useState(5000); // 5km in meters
@@ -133,6 +132,16 @@ export default function LeadFinderClient({
   const [isDeleting, setIsDeleting] = useState(false);
   const [showFormOverride, setShowFormOverride] = useState(false);
   const [showTerminalInfo, setShowTerminalInfo] = useState(false);
+
+  const isJobActive = latestJob && (latestJob.status === 'pending' || latestJob.status === 'running');
+  const isJobFinished = latestJob && (latestJob.status === 'completed' || latestJob.status === 'failed' || latestJob.status === 'cancelled');
+
+  let currentStage: 'form' | 'status' | 'result' = 'form';
+  if (isJobActive) {
+    currentStage = 'status';
+  } else if (isJobFinished && !showFormOverride) {
+    currentStage = 'result';
+  }
 
   const handleCancelCapture = async () => {
     if (!latestJob) return;
@@ -184,9 +193,9 @@ export default function LeadFinderClient({
     }
   }, []);
 
-  // Initialize and remove map based on searchMode
+  // Initialize and remove map based on currentStage
   useEffect(() => {
-    if (searchMode !== 'geo') return;
+    if (currentStage !== 'form') return;
     if (!mapContainerRef.current) return;
 
     let map: any = null;
@@ -252,7 +261,7 @@ export default function LeadFinderClient({
       setCircleInstance(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchMode]);
+  }, [currentStage]);
 
   // Synchronize Leaflet map instances with React states
   useEffect(() => {
@@ -269,6 +278,37 @@ export default function LeadFinderClient({
     // Smoothly pan map to new coordinates
     mapInstance.panTo([lat, lng]);
   }, [lat, lng, radius, mapInstance, markerInstance, circleInstance]);
+
+  // Geocode region text to map coordinates
+  useEffect(() => {
+    if (!region || region.trim().length < 3) return;
+
+    const delayDebounceFn = setTimeout(async () => {
+      try {
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(region.trim())}&limit=1`
+        );
+        if (response.ok) {
+          const data = await response.json();
+          if (data && data.length > 0) {
+            const first = data[0];
+            const newLat = parseFloat(first.lat);
+            const newLng = parseFloat(first.lon);
+            setLat(newLat);
+            setLng(newLng);
+            
+            if (mapInstance) {
+              mapInstance.setView([newLat, newLng], 12);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Erro ao geocodificar região:', err);
+      }
+    }, 1200);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [region, mapInstance]);
 
   // Table filter and sort
   const [search, setSearch] = useState('');
@@ -338,12 +378,12 @@ export default function LeadFinderClient({
       return;
     }
 
-    if (searchMode === 'region' && !region.trim()) {
+    if (!region.trim()) {
       setFormError('Por favor, preencha a Cidade ou Região.');
       return;
     }
 
-    if (searchMode === 'geo' && (isNaN(lat) || isNaN(lng))) {
+    if (isNaN(lat) || isNaN(lng)) {
       setFormError('Por favor, forneça coordenadas geográficas válidas.');
       return;
     }
@@ -351,11 +391,11 @@ export default function LeadFinderClient({
     setIsSubmitting(true);
     const result = await createLeadJob({
       category: category.trim(),
-      region: searchMode === 'region' ? region.trim() : undefined,
+      region: region.trim() || undefined,
       limitCount,
-      lat: searchMode === 'geo' ? lat : undefined,
-      lng: searchMode === 'geo' ? lng : undefined,
-      radius: searchMode === 'geo' ? radius : undefined,
+      lat: !isNaN(lat) ? lat : undefined,
+      lng: !isNaN(lng) ? lng : undefined,
+      radius: radius || undefined,
     });
     setIsSubmitting(false);
 
@@ -533,7 +573,6 @@ export default function LeadFinderClient({
       ? <ChevronUp className="h-3 w-3 text-[#2D6BFF]" />
       : <ChevronDown className="h-3 w-3 text-[#2D6BFF]" />;
   };
-
   const ThBtn = ({ col, label }: { col: SortKey; label: string }) => (
     <button
       type="button"
@@ -543,17 +582,6 @@ export default function LeadFinderClient({
       {label} <SortIcon col={col} />
     </button>
   );
-
-  const isJobActive = latestJob && (latestJob.status === 'pending' || latestJob.status === 'running');
-  const isJobFinished = latestJob && (latestJob.status === 'completed' || latestJob.status === 'failed' || latestJob.status === 'cancelled');
-
-  let currentStage: 'form' | 'status' | 'result' = 'form';
-  if (isJobActive) {
-    currentStage = 'status';
-  } else if (isJobFinished && !showFormOverride) {
-    currentStage = 'result';
-  }
-
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -584,7 +612,7 @@ export default function LeadFinderClient({
       {/* Stages Panel (Form, Status, or Result) */}
       <div className="transition-all duration-300">
         {currentStage === 'form' && (
-          <div className="bg-white rounded-2xl border border-[#D8E0EA] p-6 shadow-sm max-w-md mx-auto w-full">
+          <div className="bg-white rounded-2xl border border-[#D8E0EA] p-6 shadow-sm max-w-4xl mx-auto w-full">
             <h3 className="text-lg font-bold text-[#002B6A] mb-4 flex items-center justify-between">
               <span className="flex items-center gap-2">
                 <Search className="h-4.5 w-4.5 text-[#2D6BFF]" />
@@ -592,110 +620,80 @@ export default function LeadFinderClient({
               </span>
             </h3>
 
-            <form onSubmit={handleStartCapture} className="space-y-4">
-              {/* Category */}
-              <div className="space-y-1.5 relative" ref={dropdownRef}>
-                <div className="flex justify-between items-center">
-                  <label className="text-xs font-semibold text-[#002B6A]">Categoria / Nicho</label>
-                  <div className="flex gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setLanguage('pt');
-                        setCategory('');
-                      }}
-                      className={`text-[10px] px-2 py-0.5 rounded-full transition-all cursor-pointer border ${
-                        language === 'pt'
-                          ? 'bg-[#2D6BFF] border-[#2D6BFF] text-white font-bold shadow-sm'
-                          : 'bg-white border-[#D8E0EA] text-[#475569] hover:bg-slate-50'
-                      }`}
-                      title="Português"
-                    >
-                      PT-BR
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setLanguage('en');
-                        setCategory('');
-                      }}
-                      className={`text-[10px] px-2 py-0.5 rounded-full transition-all cursor-pointer border ${
-                        language === 'en'
-                          ? 'bg-[#2D6BFF] border-[#2D6BFF] text-white font-bold shadow-sm'
-                          : 'bg-white border-[#D8E0EA] text-[#475569] hover:bg-slate-50'
-                      }`}
-                      title="English"
-                    >
-                      EN-US
-                    </button>
-                  </div>
-                </div>
-                <input
-                  type="text"
-                  value={category}
-                  onChange={(e) => {
-                    setCategory(e.target.value);
-                    setIsCategoryDropdownOpen(true);
-                  }}
-                  onFocus={() => setIsCategoryDropdownOpen(true)}
-                  placeholder="ex: advogado, clínica odontológica, restaurante"
-                  disabled={latestJob?.status === 'pending' || latestJob?.status === 'running'}
-                  className="w-full px-3.5 py-2.5 rounded-lg border border-[#D8E0EA] bg-[#F7FAFF] text-sm text-[#061A40] placeholder-[#475569]/50 focus:outline-none focus:border-[#2D6BFF] focus:bg-white transition-all disabled:opacity-50"
-                />
-                
-                {/* Autocomplete Dropdown list */}
-                {isCategoryDropdownOpen && filteredCategories.length > 0 && (
-                  <div className="absolute left-0 right-0 mt-1 max-h-60 overflow-y-auto bg-white border border-[#D8E0EA] rounded-xl shadow-lg z-50 py-1.5 animate-fade-in scrollbar-thin">
-                    {filteredCategories.map((cat) => (
+            <form onSubmit={handleStartCapture} className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Left Column: Form Fields */}
+              <div className="space-y-4">
+                {/* Category */}
+                <div className="space-y-1.5 relative" ref={dropdownRef}>
+                  <div className="flex justify-between items-center">
+                    <label className="text-xs font-semibold text-[#002B6A]">Categoria / Nicho</label>
+                    <div className="flex gap-1.5">
                       <button
-                        key={cat}
                         type="button"
                         onClick={() => {
-                          setCategory(cat);
-                          setIsCategoryDropdownOpen(false);
+                          setLanguage('pt');
+                          setCategory('');
                         }}
-                        className="w-full text-left px-4 py-2 text-xs text-[#061A40] hover:bg-[#EAF2FF] hover:text-[#002B6A] transition-colors font-medium cursor-pointer"
+                        className={`text-[10px] px-2 py-0.5 rounded-full transition-all cursor-pointer border ${
+                          language === 'pt'
+                            ? 'bg-[#2D6BFF] border-[#2D6BFF] text-white font-bold shadow-sm'
+                            : 'bg-white border-[#D8E0EA] text-[#475569] hover:bg-slate-50'
+                        }`}
+                        title="Português"
                       >
-                        {cat}
+                        PT-BR
                       </button>
-                    ))}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLanguage('en');
+                          setCategory('');
+                        }}
+                        className={`text-[10px] px-2 py-0.5 rounded-full transition-all cursor-pointer border ${
+                          language === 'en'
+                            ? 'bg-[#2D6BFF] border-[#2D6BFF] text-white font-bold shadow-sm'
+                            : 'bg-white border-[#D8E0EA] text-[#475569] hover:bg-slate-50'
+                        }`}
+                        title="English"
+                      >
+                        EN-US
+                      </button>
+                    </div>
                   </div>
-                )}
-              </div>
-
-              {/* Mode Switcher */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-[#002B6A]">Modo de Busca</label>
-                <div className="flex gap-2 p-1 bg-slate-100/70 rounded-lg">
-                  <button
-                    type="button"
-                    onClick={() => setSearchMode('region')}
+                  <input
+                    type="text"
+                    value={category}
+                    onChange={(e) => {
+                      setCategory(e.target.value);
+                      setIsCategoryDropdownOpen(true);
+                    }}
+                    onFocus={() => setIsCategoryDropdownOpen(true)}
+                    placeholder="ex: advogado, clínica odontológica, restaurante"
                     disabled={latestJob?.status === 'pending' || latestJob?.status === 'running'}
-                    className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-all cursor-pointer ${
-                      searchMode === 'region'
-                        ? 'bg-white text-[#002B6A] shadow-sm'
-                        : 'text-[#475569] hover:text-[#002B6A]'
-                    }`}
-                  >
-                    Região (Texto)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSearchMode('geo')}
-                    disabled={latestJob?.status === 'pending' || latestJob?.status === 'running'}
-                    className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-all cursor-pointer ${
-                      searchMode === 'geo'
-                        ? 'bg-white text-[#002B6A] shadow-sm'
-                        : 'text-[#475569] hover:text-[#002B6A]'
-                    }`}
-                  >
-                    Geolocalização (Mapa)
-                  </button>
+                    className="w-full px-3.5 py-2.5 rounded-lg border border-[#D8E0EA] bg-[#F7FAFF] text-sm text-[#061A40] placeholder-[#475569]/50 focus:outline-none focus:border-[#2D6BFF] focus:bg-white transition-all disabled:opacity-50"
+                  />
+                  
+                  {/* Autocomplete Dropdown list */}
+                  {isCategoryDropdownOpen && filteredCategories.length > 0 && (
+                    <div className="absolute left-0 right-0 mt-1 max-h-60 overflow-y-auto bg-white border border-[#D8E0EA] rounded-xl shadow-lg z-50 py-1.5 animate-fade-in scrollbar-thin">
+                      {filteredCategories.map((cat) => (
+                        <button
+                          key={cat}
+                          type="button"
+                          onClick={() => {
+                            setCategory(cat);
+                            setIsCategoryDropdownOpen(false);
+                          }}
+                          className="w-full text-left px-4 py-2 text-xs text-[#061A40] hover:bg-[#EAF2FF] hover:text-[#002B6A] transition-colors font-medium cursor-pointer"
+                        >
+                          {cat}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              </div>
 
-              {/* Region (Only visible in region mode) */}
-              {searchMode === 'region' && (
+                {/* Region Input */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-[#002B6A]">Cidade ou Região</label>
                   <input
@@ -706,46 +704,28 @@ export default function LeadFinderClient({
                     disabled={latestJob?.status === 'pending' || latestJob?.status === 'running'}
                     className="w-full px-3.5 py-2.5 rounded-lg border border-[#D8E0EA] bg-[#F7FAFF] text-sm text-[#061A40] placeholder-[#475569]/50 focus:outline-none focus:border-[#2D6BFF] focus:bg-white transition-all disabled:opacity-50"
                   />
+                  <p className="text-[10px] text-[#475569]/70">
+                    O mapa à direita irá se mover automaticamente ao preencher este campo.
+                  </p>
                 </div>
-              )}
 
-              {/* Geolocalisation (Only visible in geo mode) */}
-              {searchMode === 'geo' && (
-                <div className="space-y-3">
+                {/* Limit results & Radius in a grid */}
+                <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-[#002B6A]">Selecione a área no mapa</label>
-                    <div 
-                      ref={mapContainerRef} 
-                      className="w-full aspect-square rounded-2xl border border-[#D8E0EA] bg-slate-50 overflow-hidden z-10" 
-                    />
+                    <label className="text-xs font-semibold text-[#002B6A]">Quantidade Máxima</label>
+                    <select
+                      value={limitCount}
+                      onChange={(e) => setLimitCount(Number(e.target.value))}
+                      disabled={latestJob?.status === 'pending' || latestJob?.status === 'running'}
+                      className="w-full px-3 py-2 text-xs rounded-lg border border-[#D8E0EA] bg-[#F7FAFF] text-[#061A40] focus:outline-none focus:border-[#2D6BFF] focus:bg-white transition-all disabled:opacity-50"
+                    >
+                      <option value={10}>10 resultados</option>
+                      <option value={50}>50 resultados</option>
+                      <option value={100}>100 resultados</option>
+                    </select>
                   </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-1">
-                      <span className="text-[10px] font-bold text-[#475569] uppercase">Latitude</span>
-                      <input
-                        type="number"
-                        step="any"
-                        value={lat}
-                        onChange={(e) => setLat(Number(e.target.value))}
-                        disabled={latestJob?.status === 'pending' || latestJob?.status === 'running'}
-                        className="w-full px-2.5 py-1.5 rounded-lg border border-[#D8E0EA] bg-[#F7FAFF] text-xs text-[#061A40] focus:outline-none focus:border-[#2D6BFF] focus:bg-white transition-all disabled:opacity-50"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <span className="text-[10px] font-bold text-[#475569] uppercase">Longitude</span>
-                      <input
-                        type="number"
-                        step="any"
-                        value={lng}
-                        onChange={(e) => setLng(Number(e.target.value))}
-                        disabled={latestJob?.status === 'pending' || latestJob?.status === 'running'}
-                        className="w-full px-2.5 py-1.5 rounded-lg border border-[#D8E0EA] bg-[#F7FAFF] text-xs text-[#061A40] focus:outline-none focus:border-[#2D6BFF] focus:bg-white transition-all disabled:opacity-50"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-1 pt-1">
+                  
+                  <div className="space-y-1.5">
                     <div className="flex justify-between text-xs font-semibold text-[#002B6A]">
                       <span>Raio de Busca</span>
                       <span className="text-[#2D6BFF] font-bold">{(radius / 1000).toFixed(0)} km</span>
@@ -758,50 +738,45 @@ export default function LeadFinderClient({
                       value={radius}
                       onChange={(e) => setRadius(Number(e.target.value))}
                       disabled={latestJob?.status === 'pending' || latestJob?.status === 'running'}
-                      className="w-full h-1 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-[#2D6BFF] disabled:opacity-50"
+                      className="w-full h-1 mt-2.5 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-[#2D6BFF] disabled:opacity-50"
                     />
-                    <div className="flex justify-between text-[9px] text-[#475569]/85">
-                      <span>1 km</span>
-                      <span>20 km</span>
-                    </div>
                   </div>
                 </div>
-              )}
 
-              {/* Limit results */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-[#002B6A]">Quantidade Máxima</label>
-                <select
-                  value={limitCount}
-                  onChange={(e) => setLimitCount(Number(e.target.value))}
-                  disabled={latestJob?.status === 'pending' || latestJob?.status === 'running'}
-                  className="w-full px-3.5 py-2.5 rounded-lg border border-[#D8E0EA] bg-[#F7FAFF] text-sm text-[#061A40] focus:outline-none focus:border-[#2D6BFF] focus:bg-white transition-all disabled:opacity-50"
+                {formError && (
+                  <div className="p-3 bg-rose-50 border border-rose-200 text-xs text-rose-600 font-medium rounded-lg flex items-start gap-2">
+                    <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                    <span>{formError}</span>
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="w-full py-2.5 rounded-lg text-sm font-semibold text-white bg-[#2D6BFF] hover:bg-[#1b58ec] disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 shadow-sm cursor-pointer"
                 >
-                  <option value={10}>10 resultados</option>
-                  <option value={50}>50 resultados</option>
-                  <option value={100}>100 resultados</option>
-                </select>
+                  {isSubmitting ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-4 w-4" />
+                  )}
+                  Buscar Leads
+                </button>
               </div>
 
-              {formError && (
-                <div className="p-3 bg-rose-50 border border-rose-200 text-xs text-rose-600 font-medium rounded-lg flex items-start gap-2">
-                  <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                  <span>{formError}</span>
+              {/* Right Column: Map */}
+              <div className="space-y-1.5 flex flex-col justify-between">
+                <div className="flex justify-between items-center">
+                  <label className="text-xs font-semibold text-[#002B6A]">Área Geográfica Selecionada</label>
+                  <span className="text-[10px] text-[#475569]/80 font-mono bg-slate-100 px-2 py-0.5 rounded">
+                    {lat.toFixed(4)}, {lng.toFixed(4)}
+                  </span>
                 </div>
-              )}
-
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="w-full py-2.5 rounded-lg text-sm font-semibold text-white bg-[#2D6BFF] hover:bg-[#1b58ec] disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 shadow-sm cursor-pointer"
-              >
-                {isSubmitting ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Sparkles className="h-4 w-4" />
-                )}
-                Buscar Leads
-              </button>
+                <div 
+                  ref={mapContainerRef} 
+                  className="w-full aspect-square md:h-[280px] md:aspect-auto rounded-2xl border border-[#D8E0EA] bg-slate-50 overflow-hidden z-10" 
+                />
+              </div>
             </form>
           </div>
         )}
