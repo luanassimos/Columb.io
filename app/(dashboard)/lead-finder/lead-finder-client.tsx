@@ -49,15 +49,19 @@ interface LeadFinderClientProps {
 type SortKey = 'name' | 'phone' | 'website' | 'address' | 'created_at';
 type SortDir = 'asc' | 'desc';
 
-const SUGGESTED_CATEGORIES = [
-  "Restaurante", "Restaurant", "Foodtruck", "Food Truck", "Advogado", "Lawyer",
-  "Clínica Odontológica", "Dentista", "Dentist", "Imobiliária", "Real Estate",
-  "Salão de Beleza", "Beauty Salon", "Academia", "Gym", "Cafeteria", "Coffee Shop",
-  "Hamburgueria", "Burger Joint", "Pizzaria", "Pizzeria", "Hotel", "Petshop",
-  "Pet Shop", "Oficina Mecânica", "Auto Repair", "Contabilidade", "Accountant",
-  "Clínica Médica", "Medical Clinic", "Clínica de Estética", "Spa", "Escola",
-  "School", "Coworking", "Agência de Marketing", "Marketing Agency", "Padaria",
-  "Bakery", "Farmácia", "Pharmacy", "Floricultura", "Florist"
+const SUGGESTED_CATEGORIES_PT = [
+  "Restaurante", "Foodtruck", "Advogado", "Clínica Odontológica", "Dentista", 
+  "Imobiliária", "Salão de Beleza", "Academia", "Cafeteria", "Hamburgueria", 
+  "Pizzaria", "Hotel", "Petshop", "Oficina Mecânica", "Contabilidade", 
+  "Clínica Médica", "Clínica de Estética", "Spa", "Escola", "Coworking", 
+  "Agência de Marketing", "Padaria", "Farmácia", "Floricultura"
+];
+
+const SUGGESTED_CATEGORIES_EN = [
+  "Restaurant", "Food Truck", "Lawyer", "Dentist", "Real Estate", "Beauty Salon", 
+  "Gym", "Coffee Shop", "Burger Joint", "Pizzeria", "Hotel", "Pet Shop", 
+  "Auto Repair", "Accountant", "Medical Clinic", "Spa", "School", "Coworking", 
+  "Marketing Agency", "Bakery", "Pharmacy", "Florist"
 ];
 
 export default function LeadFinderClient({
@@ -93,7 +97,10 @@ export default function LeadFinderClient({
     };
   }, []);
 
-  const filteredCategories = SUGGESTED_CATEGORIES.filter((cat) =>
+  const [language, setLanguage] = useState<'pt' | 'en'>('pt');
+
+  const categoriesList = language === 'pt' ? SUGGESTED_CATEGORIES_PT : SUGGESTED_CATEGORIES_EN;
+  const filteredCategories = categoriesList.filter((cat) =>
     cat.toLowerCase().includes(category.toLowerCase())
   );
   const [limitCount, setLimitCount] = useState(10);
@@ -577,16 +584,52 @@ export default function LeadFinderClient({
       {/* Stages Panel (Form, Status, or Result) */}
       <div className="transition-all duration-300">
         {currentStage === 'form' && (
-          <div className="bg-white rounded-2xl border border-[#D8E0EA] p-6 shadow-sm">
-            <h3 className="text-lg font-bold text-[#002B6A] mb-4 flex items-center gap-2">
-              <Search className="h-4.5 w-4.5 text-[#2D6BFF]" />
-              Iniciar Nova Captura
+          <div className="bg-white rounded-2xl border border-[#D8E0EA] p-6 shadow-sm max-w-md mx-auto w-full">
+            <h3 className="text-lg font-bold text-[#002B6A] mb-4 flex items-center justify-between">
+              <span className="flex items-center gap-2">
+                <Search className="h-4.5 w-4.5 text-[#2D6BFF]" />
+                Iniciar Nova Captura
+              </span>
             </h3>
 
             <form onSubmit={handleStartCapture} className="space-y-4">
               {/* Category */}
               <div className="space-y-1.5 relative" ref={dropdownRef}>
-                <label className="text-xs font-semibold text-[#002B6A]">Categoria / Nicho</label>
+                <div className="flex justify-between items-center">
+                  <label className="text-xs font-semibold text-[#002B6A]">Categoria / Nicho</label>
+                  <div className="flex gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLanguage('pt');
+                        setCategory('');
+                      }}
+                      className={`text-[10px] px-2 py-0.5 rounded-full transition-all cursor-pointer border ${
+                        language === 'pt'
+                          ? 'bg-[#2D6BFF] border-[#2D6BFF] text-white font-bold shadow-sm'
+                          : 'bg-white border-[#D8E0EA] text-[#475569] hover:bg-slate-50'
+                      }`}
+                      title="Português"
+                    >
+                      PT-BR
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLanguage('en');
+                        setCategory('');
+                      }}
+                      className={`text-[10px] px-2 py-0.5 rounded-full transition-all cursor-pointer border ${
+                        language === 'en'
+                          ? 'bg-[#2D6BFF] border-[#2D6BFF] text-white font-bold shadow-sm'
+                          : 'bg-white border-[#D8E0EA] text-[#475569] hover:bg-slate-50'
+                      }`}
+                      title="English"
+                    >
+                      EN-US
+                    </button>
+                  </div>
+                </div>
                 <input
                   type="text"
                   value={category}
@@ -673,7 +716,7 @@ export default function LeadFinderClient({
                     <label className="text-xs font-semibold text-[#002B6A]">Selecione a área no mapa</label>
                     <div 
                       ref={mapContainerRef} 
-                      className="h-60 w-full rounded-lg border border-[#D8E0EA] bg-slate-50 overflow-hidden z-10" 
+                      className="w-full aspect-square rounded-2xl border border-[#D8E0EA] bg-slate-50 overflow-hidden z-10" 
                     />
                   </div>
 
