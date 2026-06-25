@@ -16,7 +16,8 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
-  Calendar
+  Calendar,
+  Target
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -31,6 +32,7 @@ export default function Sidebar({ profileName, userEmail }: SidebarProps) {
   const mainNavItems = [
     { label: 'Dashboard', icon: LayoutDashboard, href: '/dashboard' },
     { label: 'Leads', icon: Users, href: '/contacts' },
+    { label: 'Captar Leads', icon: Target, href: '/lead-finder' },
     { label: 'Templates', icon: Mail, href: '/templates' },
     { label: 'Campaigns', icon: Calendar, href: '/campaigns' },
     { label: 'Email Blasts', icon: Send, href: '/blasts' },
