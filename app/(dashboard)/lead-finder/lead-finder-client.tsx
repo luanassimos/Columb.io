@@ -133,6 +133,15 @@ export default function LeadFinderClient({
   const [showFormOverride, setShowFormOverride] = useState(false);
   const [showTerminalInfo, setShowTerminalInfo] = useState(false);
 
+  // Pigeon search animation state (2 frames)
+  const [pigeonFrame, setPigeonFrame] = useState(1);
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setPigeonFrame((f) => (f === 1 ? 2 : 1));
+    }, 800);
+    return () => clearInterval(interval);
+  }, []);
+
   const isJobActive = latestJob && (latestJob.status === 'pending' || latestJob.status === 'running');
   const isJobFinished = latestJob && (latestJob.status === 'completed' || latestJob.status === 'failed' || latestJob.status === 'cancelled');
 
@@ -584,6 +593,33 @@ export default function LeadFinderClient({
   );
   return (
     <div className="space-y-6">
+      {/* Animation Styles */}
+      <style>{`
+        @keyframes pigeon-float {
+          0%, 100% { transform: translateY(0px) scale(1); }
+          50% { transform: translateY(-4px) scale(1.02); }
+        }
+        @keyframes radar-pulse {
+          0% { transform: scale(0.6); opacity: 0.8; }
+          100% { transform: scale(1.4); opacity: 0; }
+        }
+        @keyframes scan-line {
+          0% { transform: translateY(0px); opacity: 0; }
+          10% { opacity: 1; }
+          90% { opacity: 1; }
+          100% { transform: translateY(96px); opacity: 0; }
+        }
+        .animate-pigeon-float {
+          animation: pigeon-float 2s ease-in-out infinite;
+        }
+        .animate-radar-pulse {
+          animation: radar-pulse 2s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
+        }
+        .animate-scan-line {
+          animation: scan-line 3s ease-in-out infinite;
+        }
+      `}</style>
+
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
@@ -612,7 +648,7 @@ export default function LeadFinderClient({
       {/* Stages Panel (Form, Status, or Result) */}
       <div className="transition-all duration-300">
         {currentStage === 'form' && (
-          <div className="bg-white rounded-2xl border border-[#D8E0EA] p-6 shadow-sm max-w-4xl mx-auto w-full">
+          <div className="bg-white rounded-2xl border border-[#D8E0EA] p-6 shadow-sm w-full">
             <h3 className="text-lg font-bold text-[#002B6A] mb-4 flex items-center justify-between">
               <span className="flex items-center gap-2">
                 <Search className="h-4.5 w-4.5 text-[#2D6BFF]" />
@@ -782,72 +818,105 @@ export default function LeadFinderClient({
         )}
 
         {currentStage === 'status' && latestJob && (
-          <div className="bg-white rounded-2xl border border-[#D8E0EA] p-6 shadow-sm">
-            <h3 className="text-lg font-bold text-[#002B6A] mb-4">Captura de Leads em Andamento</h3>
-
-            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 p-4 rounded-xl border border-slate-100 bg-slate-50/50">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-[#475569] uppercase tracking-wider">Busca:</span>
-                  <span className="text-sm font-bold text-[#002B6A]">
-                    &quot;{latestJob.category}&quot; {latestJob.region ? `em "${latestJob.region}"` : `via Geolocalização`}
-                  </span>
-                </div>
-                <div className="text-xs text-[#475569]">
-                  Criado em: {new Date(latestJob.created_at).toLocaleString('pt-BR')}
-                </div>
+          <div className="bg-white rounded-2xl border border-[#D8E0EA] p-6 shadow-sm flex flex-col md:flex-row items-center gap-6">
+            {/* Pigeon searching animation container */}
+            <div className="shrink-0 w-24 h-24 rounded-2xl border border-[#D8E0EA] bg-gradient-to-b from-[#F7FAFF] to-[#EAF2FF] flex items-center justify-center relative overflow-hidden shadow-inner">
+              {/* Radar waves */}
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div className="absolute w-16 h-16 rounded-full border border-[#2D6BFF]/20 animate-radar-pulse" style={{ animationDelay: '0s' }} />
+                <div className="absolute w-16 h-16 rounded-full border border-[#2D6BFF]/20 animate-radar-pulse" style={{ animationDelay: '1s' }} />
               </div>
-
-              <div className="flex items-center gap-3">
-                {latestJob.status === 'pending' && (
-                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-50 border border-blue-200 text-blue-600 text-xs font-bold animate-pulse">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    Pendente
-                  </div>
-                )}
-
-                {latestJob.status === 'running' && (
-                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-50 border border-amber-200 text-amber-600 text-xs font-bold">
-                    <div className="h-2 w-2 rounded-full bg-amber-500 animate-ping" />
-                    Executando ({latestJob.progress_count} / {latestJob.limit_count})
-                  </div>
-                )}
-
-                <button
-                  type="button"
-                  onClick={handleCancelCapture}
-                  disabled={isCancelling}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 border border-rose-200 text-rose-600 hover:bg-rose-100 disabled:opacity-50 text-xs font-bold rounded-lg transition-all cursor-pointer"
-                >
-                  {isCancelling ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <X className="h-3.5 w-3.5" />
-                  )}
-                  Cancelar Captura
-                </button>
+              
+              {/* Scan line effect */}
+              <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-transparent via-[#2D6BFF]/30 to-transparent animate-scan-line pointer-events-none" />
+              
+              {/* Stacked images for crossfade */}
+              <div className="relative w-20 h-20">
+                <img
+                  src="/search_01.webp"
+                  alt="Pombo Procurando"
+                  className={`absolute inset-0 w-full h-full object-contain transition-opacity duration-500 ${
+                    pigeonFrame === 1 ? 'opacity-100' : 'opacity-0'
+                  }`}
+                />
+                <img
+                  src="/search_02.webp"
+                  alt="Pombo Procurando"
+                  className={`absolute inset-0 w-full h-full object-contain transition-opacity duration-500 ${
+                    pigeonFrame === 2 ? 'opacity-100' : 'opacity-0'
+                  }`}
+                />
               </div>
+              <div className="absolute inset-0 bg-gradient-to-tr from-[#2D6BFF]/5 to-transparent pointer-events-none" />
             </div>
 
-            {/* Progress bar for running */}
-            {latestJob.status === 'running' && (
-              <div className="mt-4 space-y-1">
-                <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-                  <div
-                    className="bg-[#2D6BFF] h-2 transition-all duration-500 rounded-full"
-                    style={{
-                      width: `${Math.min(
-                        100,
-                        (latestJob.progress_count / latestJob.limit_count) * 100
-                      )}%`,
-                    }}
-                  />
+            <div className="flex-1 w-full space-y-4">
+              <h3 className="text-lg font-bold text-[#002B6A]">Captura de Leads em Andamento</h3>
+
+              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 p-4 rounded-xl border border-slate-100 bg-slate-50/50">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-[#475569] uppercase tracking-wider">Busca:</span>
+                    <span className="text-sm font-bold text-[#002B6A]">
+                      &quot;{latestJob.category}&quot; {latestJob.region ? `em "${latestJob.region}"` : `via Geolocalização`}
+                    </span>
+                  </div>
+                  <div className="text-xs text-[#475569]">
+                    Criado em: {new Date(latestJob.created_at).toLocaleString('pt-BR')}
+                  </div>
                 </div>
-                <div className="text-right text-[10px] text-[#475569] font-medium">
-                  {Math.round((latestJob.progress_count / latestJob.limit_count) * 100)}% concluído
+
+                <div className="flex items-center gap-3">
+                  {latestJob.status === 'pending' && (
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-50 border border-blue-200 text-blue-600 text-xs font-bold animate-pulse">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Pendente
+                    </div>
+                  )}
+
+                  {latestJob.status === 'running' && (
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-50 border border-amber-200 text-amber-600 text-xs font-bold">
+                      <div className="h-2 w-2 rounded-full bg-amber-500 animate-ping" />
+                      Executando ({latestJob.progress_count} / {latestJob.limit_count})
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={handleCancelCapture}
+                    disabled={isCancelling}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 border border-rose-200 text-rose-600 hover:bg-rose-100 disabled:opacity-50 text-xs font-bold rounded-lg transition-all cursor-pointer"
+                  >
+                    {isCancelling ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <X className="h-3.5 w-3.5" />
+                    )}
+                    Cancelar Captura
+                  </button>
                 </div>
               </div>
-            )}
+
+              {/* Progress bar for running */}
+              {latestJob.status === 'running' && (
+                <div className="space-y-1">
+                  <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                    <div
+                      className="bg-[#2D6BFF] h-2 transition-all duration-500 rounded-full"
+                      style={{
+                        width: `${Math.min(
+                          100,
+                          (latestJob.progress_count / latestJob.limit_count) * 100
+                        )}%`,
+                      }}
+                    />
+                  </div>
+                  <div className="text-right text-[10px] text-[#475569] font-medium">
+                    {Math.round((latestJob.progress_count / latestJob.limit_count) * 100)}% concluído
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -1309,6 +1378,51 @@ export default function LeadFinderClient({
                 <Target className="h-3.5 w-3.5" />
                 Ver no Google Maps
               </a>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Submitting Pigeon Overlay */}
+      {isSubmitting && (
+        <div className="fixed inset-0 bg-[#061A40]/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-white rounded-2xl border border-[#D8E0EA] p-8 shadow-2xl flex flex-col items-center text-center max-w-sm space-y-4">
+            <div className="relative w-28 h-28 overflow-hidden rounded-full border-2 border-[#2D6BFF]/30 bg-gradient-to-b from-[#F7FAFF] to-[#EAF2FF] flex items-center justify-center">
+              {/* Radar waves */}
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div className="absolute w-20 h-20 rounded-full border border-[#2D6BFF]/25 animate-radar-pulse" style={{ animationDelay: '0s' }} />
+                <div className="absolute w-20 h-20 rounded-full border border-[#2D6BFF]/25 animate-radar-pulse" style={{ animationDelay: '1s' }} />
+              </div>
+
+              {/* Scan line effect */}
+              <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-transparent via-[#2D6BFF]/30 to-transparent animate-scan-line pointer-events-none" />
+
+              {/* Stacked images for crossfade */}
+              <div className="relative w-24 h-24">
+                <img
+                  src="/search_01.webp"
+                  alt="Pombo Procurando"
+                  className={`absolute inset-0 w-full h-full object-contain transition-opacity duration-500 ${
+                    pigeonFrame === 1 ? 'opacity-100' : 'opacity-0'
+                  }`}
+                />
+                <img
+                  src="/search_02.webp"
+                  alt="Pombo Procurando"
+                  className={`absolute inset-0 w-full h-full object-contain transition-opacity duration-500 ${
+                    pigeonFrame === 2 ? 'opacity-100' : 'opacity-0'
+                  }`}
+                />
+              </div>
+            </div>
+            <div>
+              <h4 className="text-base font-bold text-[#002B6A]">Enviando o Pombo!</h4>
+              <p className="text-xs text-[#475569] mt-1">
+                Preparando as coordenadas e enviando o pombo para captar leads...
+              </p>
+            </div>
+            <div className="flex items-center gap-2 text-xs font-semibold text-[#2D6BFF]">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span>Iniciando busca...</span>
             </div>
           </div>
         </div>
