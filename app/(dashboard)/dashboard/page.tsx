@@ -10,7 +10,15 @@ import {
   Send,
   ArrowRight,
   Briefcase,
-  Users
+  Users,
+  Target,
+  BarChart3,
+  TrendingUp,
+  Clock,
+  Play,
+  ArrowUpRight,
+  CheckCircle2,
+  AlertCircle
 } from 'lucide-react';
 
 export default async function DashboardPage() {
@@ -169,6 +177,60 @@ export default async function DashboardPage() {
     }
   } catch (err) {
     console.error('Exception fetching dry-run email jobs count in dashboard:', err);
+  }
+
+  // E. Fetch Latest Lead Finder Job
+  let latestJob: any = null;
+  if (supabase && workspaceId) try {
+    const { data, error } = await supabase
+      .from('lead_finder_jobs')
+      .select('*')
+      .eq('workspace_id', workspaceId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!error) latestJob = data;
+  } catch (err) {
+    console.error('Error fetching latest lead finder job:', err);
+  }
+
+  // F. Fetch Contact Status Counts
+  const statusCounts = {
+    new: 0,
+    contacted: 0,
+    waiting: 0,
+    replied: 0,
+    converted: 0,
+    closed: 0,
+  };
+  if (supabase && workspaceId) try {
+    const { data, error } = await supabase
+      .from('contacts')
+      .select('status')
+      .eq('workspace_id', workspaceId);
+    if (!error && data) {
+      data.forEach((c) => {
+        if (c.status in statusCounts) {
+          statusCounts[c.status as keyof typeof statusCounts]++;
+        }
+      });
+    }
+  } catch (err) {
+    console.error('Error fetching contact status counts:', err);
+  }
+
+  // G. Fetch Latest Campaigns
+  let latestCampaigns: any[] = [];
+  if (supabase && workspaceId) try {
+    const { data, error } = await supabase
+      .from('campaigns')
+      .select('*, templates(name)')
+      .eq('workspace_id', workspaceId)
+      .order('created_at', { ascending: false })
+      .limit(3);
+    if (!error) latestCampaigns = data || [];
+  } catch (err) {
+    console.error('Error fetching latest campaigns:', err);
   }
 
   const steps = [
@@ -334,16 +396,226 @@ export default async function DashboardPage() {
         ))}
       </div>
 
-      {/* Overview Block */}
-      <div className="glass-card rounded-2xl border border-[#D8E0EA] p-8 text-center max-w-xl mx-auto py-16 space-y-4">
-        <div className="h-12 w-12 rounded-full bg-[#EAF2FF] border border-[#D8E0EA] text-[#002B6A] flex items-center justify-center mx-auto">
-          <Briefcase className="h-6 w-6" />
+      {/* Workspace Insights Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 pt-4">
+        {/* Left Column: Lead Finder & Funnel */}
+        <div className="space-y-6">
+          {/* Card 1: Last Lead Scraping Job */}
+          <div className="bg-white rounded-2xl border border-[#D8E0EA] p-6 shadow-sm relative overflow-hidden flex flex-col justify-between min-h-[190px] group">
+            {/* Tiny Background Cloud decoration for theme matching */}
+            <div className="absolute inset-0 pointer-events-none overflow-hidden opacity-[0.12] select-none">
+              <div className="cloud-static top-4 right-4 scale-[0.6] bg-slate-400"></div>
+            </div>
+
+            <div className="relative z-10">
+              <div className="flex justify-between items-start">
+                <div className="space-y-1">
+                  <span className="text-[10px] font-bold text-[#475569]/70 uppercase tracking-wider block">
+                    Última Captação de Leads
+                  </span>
+                  <h3 className="text-base font-extrabold text-[#002B6A] flex items-center gap-1.5">
+                    <Target className="h-4.5 w-4.5 text-[#2D6BFF]" />
+                    {latestJob ? `Buscar ${latestJob.category}` : 'Nenhuma captura realizada'}
+                  </h3>
+                </div>
+                {latestJob && (
+                  <span
+                    className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase shrink-0 ${
+                      latestJob.status === 'running'
+                        ? 'bg-blue-50 text-blue-600 animate-pulse'
+                        : latestJob.status === 'completed'
+                        ? 'bg-emerald-50 text-emerald-600'
+                        : latestJob.status === 'failed'
+                        ? 'bg-rose-50 text-rose-600'
+                        : 'bg-slate-50 text-[#475569]'
+                    }`}
+                  >
+                    {latestJob.status === 'running'
+                      ? 'Processando'
+                      : latestJob.status === 'completed'
+                      ? 'Concluído'
+                      : latestJob.status === 'failed'
+                      ? 'Falhou'
+                      : latestJob.status === 'cancelled'
+                      ? 'Cancelado'
+                      : 'Pendente'}
+                  </span>
+                )}
+              </div>
+
+              {latestJob ? (
+                <div className="mt-4 space-y-3">
+                  <p className="text-xs text-[#475569]">
+                    Foco: <span className="font-semibold text-[#061A40]">{latestJob.category}</span> em <span className="font-semibold text-[#061A40]">{latestJob.region || 'Geo Coordenadas'}</span>
+                  </p>
+                  
+                  {/* Progress Bar */}
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-[10px] font-bold text-[#475569]/80">
+                      <span>Progresso da Captura</span>
+                      <span>{latestJob.progress_count} / {latestJob.limit_count} Leads</span>
+                    </div>
+                    <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-[#2D6BFF] transition-all duration-500"
+                        style={{ width: `${Math.min(100, (latestJob.progress_count / latestJob.limit_count) * 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-[#475569]/70 mt-3 leading-relaxed">
+                  Inicie uma busca automatizada para extrair contatos de estabelecimentos diretamente do Google Maps.
+                </p>
+              )}
+            </div>
+
+            <div className="pt-4 border-t border-[#D8E0EA]/60 flex justify-between items-center mt-3 relative z-10">
+              <span className="text-[10px] font-medium text-[#475569]/60">
+                {latestJob ? `Criado em ${new Date(latestJob.created_at).toLocaleDateString('pt-BR')}` : 'Pronto para iniciar'}
+              </span>
+              <Link
+                href="/lead-finder"
+                className="text-xs font-bold text-[#2D6BFF] hover:text-[#1b58ec] flex items-center gap-1 group/btn"
+              >
+                Captar Leads
+                <ArrowUpRight className="h-3.5 w-3.5 transition-transform group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5" />
+              </Link>
+            </div>
+          </div>
+
+          {/* Card 2: CRM Lead Funnel Breakdown */}
+          <div className="bg-white rounded-2xl border border-[#D8E0EA] p-6 shadow-sm space-y-4">
+            <div>
+              <span className="text-[10px] font-bold text-[#475569]/70 uppercase tracking-wider block">
+                Funil de Conversão do CRM
+              </span>
+              <h3 className="text-base font-extrabold text-[#002B6A] flex items-center gap-1.5">
+                <BarChart3 className="h-4.5 w-4.5 text-[#14B8A6]" />
+                Status dos Leads
+              </h3>
+            </div>
+
+            {totalContacts > 0 ? (
+              <div className="space-y-3">
+                {[
+                  { label: 'Novos Leads', key: 'new', color: 'bg-[#2D6BFF]' },
+                  { label: 'Contatados', key: 'contacted', color: 'bg-amber-400' },
+                  { label: 'Aguardando Resposta', key: 'waiting', color: 'bg-orange-500' },
+                  { label: 'Respondidos', key: 'replied', color: 'bg-emerald-500' },
+                  { label: 'Convertidos', key: 'converted', color: 'bg-teal-500' },
+                ].map((status) => {
+                  const count = statusCounts[status.key as keyof typeof statusCounts] || 0;
+                  const pct = totalContacts > 0 ? (count / totalContacts) * 100 : 0;
+                  return (
+                    <div key={status.key} className="space-y-1">
+                      <div className="flex justify-between text-xs">
+                        <span className="font-semibold text-[#475569]">{status.label}</span>
+                        <span className="font-extrabold text-[#061A40]">
+                          {count} <span className="text-[10px] text-[#475569]/60 font-medium">({pct.toFixed(0)}%)</span>
+                        </span>
+                      </div>
+                      <div className="w-full h-1.5 bg-slate-50 rounded-full overflow-hidden border border-slate-100">
+                        <div
+                          className={`h-full ${status.color} transition-all duration-500`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-10 text-xs text-[#475569]/65">
+                Adicione ou importe leads no CRM para visualizar as etapas do funil de conversão.
+              </div>
+            )}
+          </div>
         </div>
-        <div className="space-y-1">
-          <h2 className="text-lg font-bold text-[#002B6A]">Fluxo Integrado Columb</h2>
-          <p className="text-xs text-[#475569] max-w-sm mx-auto leading-relaxed">
-            Seu funil está operando sob políticas isoladas de segurança. Use o menu lateral para gerenciar leads, personalizar modelos e programar campanhas de disparo.
-          </p>
+
+        {/* Right Column: Campaigns & Outreach */}
+        <div className="space-y-6">
+          {/* Card 3: Campaigns List & Performance */}
+          <div className="bg-white rounded-2xl border border-[#D8E0EA] p-6 shadow-sm flex flex-col justify-between h-full min-h-[350px] space-y-4">
+            <div className="space-y-4">
+              <div className="flex justify-between items-start">
+                <div>
+                  <span className="text-[10px] font-bold text-[#475569]/70 uppercase tracking-wider block">
+                    Campanhas Recentes
+                  </span>
+                  <h3 className="text-base font-extrabold text-[#002B6A] flex items-center gap-1.5">
+                    <TrendingUp className="h-4.5 w-4.5 text-purple-600" />
+                    Envios & Sequências
+                  </h3>
+                </div>
+                <Link
+                  href="/campaigns"
+                  className="text-xs font-bold text-[#2D6BFF] hover:text-[#1b58ec] flex items-center gap-1 group/cbtn"
+                >
+                  Ver Todas
+                  <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover/cbtn:translate-x-0.5" />
+                </Link>
+              </div>
+
+              {latestCampaigns.length > 0 ? (
+                <div className="divide-y divide-[#D8E0EA]/60">
+                  {latestCampaigns.map((cam) => (
+                    <div key={cam.id} className="py-3 flex items-center justify-between gap-3">
+                      <div className="min-w-0 space-y-0.5">
+                        <p className="font-semibold text-sm text-[#002B6A] truncate">{cam.name}</p>
+                        <p className="text-[10px] text-[#475569]/70 flex items-center gap-1">
+                          <Clock className="h-3 w-3 text-[#475569]/50" />
+                          Template: <span className="font-medium">{cam.templates?.name || 'Sem template'}</span>
+                        </p>
+                      </div>
+                      <span
+                        className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase shrink-0 ${
+                          cam.status === 'running'
+                            ? 'bg-purple-50 text-purple-600 animate-pulse'
+                            : cam.status === 'completed'
+                            ? 'bg-emerald-50 text-emerald-600'
+                            : cam.status === 'queued'
+                            ? 'bg-blue-50 text-blue-600'
+                            : 'bg-slate-50 text-[#475569]'
+                        }`}
+                      >
+                        {cam.status === 'running'
+                          ? 'Enviando'
+                          : cam.status === 'completed'
+                          ? 'Concluído'
+                          : cam.status === 'queued'
+                          ? 'Agendado'
+                          : cam.status === 'draft'
+                          ? 'Rascunho'
+                          : 'Cancelado'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-16 space-y-3">
+                  <div className="h-10 w-10 rounded-full bg-purple-50 text-purple-600 flex items-center justify-center mx-auto">
+                    <Play className="h-4.5 w-4.5" />
+                  </div>
+                  <p className="text-xs text-[#475569]/60 max-w-[240px] mx-auto leading-relaxed">
+                    Nenhuma sequência de e-mails configurada. Crie uma campanha para iniciar disparos.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="pt-4 border-t border-[#D8E0EA]/60 flex justify-between items-center text-xs mt-auto">
+              <span className="text-[#475569]/60">Total de Campanhas: <strong className="text-[#061A40]">{totalCampaigns}</strong></span>
+              {totalCampaigns > 0 && (
+                <Link
+                  href="/campaigns"
+                  className="px-3.5 py-1.5 bg-[#2D6BFF] hover:bg-[#1b58ec] text-white rounded-lg text-[10px] font-bold transition-all shadow-sm shadow-[#2D6BFF]/20"
+                >
+                  Nova Campanha
+                </Link>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </div>
