@@ -1,10 +1,10 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Sidebar from './sidebar';
 import WorkspaceSwitcher from './workspace-switcher';
 import NotificationCenter from './notification-center';
-import { User, Menu } from 'lucide-react';
+import { User, Menu, Sun, Moon } from 'lucide-react';
 
 interface DashboardLayoutClientProps {
   profile: any;
@@ -26,6 +26,31 @@ export default function DashboardLayoutClient({
   children,
 }: DashboardLayoutClientProps) {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [darkMode, setDarkMode] = useState(false);
+
+  // Initialize theme on mount
+  useEffect(() => {
+    const isDark = localStorage.getItem('theme') === 'dark' ||
+                   (!localStorage.getItem('theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    setDarkMode(isDark);
+    if (isDark) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, []);
+
+  const toggleDarkMode = () => {
+    const nextDark = !darkMode;
+    setDarkMode(nextDark);
+    if (nextDark) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+    }
+  };
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-background text-foreground font-sans relative">
@@ -72,6 +97,16 @@ export default function DashboardLayoutClient({
 
             {/* Right Header items (Notification icon & Profile menu) */}
             <div className="flex items-center gap-2 lg:gap-4">
+              {/* Dark Mode Toggle */}
+              <button
+                type="button"
+                onClick={toggleDarkMode}
+                className="p-2 rounded-xl text-[#002B6A] hover:bg-[#EAF2FF] transition-all cursor-pointer dark:text-[#e2ecff] dark:hover:bg-[#172a45]"
+                title={darkMode ? 'Ativar Modo Claro' : 'Ativar Modo Escuro'}
+              >
+                {darkMode ? <Sun className="h-5 w-5 text-amber-500" /> : <Moon className="h-5 w-5 text-[#002B6A]" />}
+              </button>
+
               {/* Notification icon */}
               <NotificationCenter
                 notifications={notificationsList}
