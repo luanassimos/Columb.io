@@ -23,16 +23,19 @@ import {
 interface SidebarProps {
   profileName: string;
   userEmail: string;
+  mobileOpen?: boolean;
+  onClose?: () => void;
 }
 
-export default function Sidebar({ profileName, userEmail }: SidebarProps) {
+export default function Sidebar({ profileName, userEmail, mobileOpen, onClose }: SidebarProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const pathname = usePathname();
 
   const mainNavItems = [
     { label: 'Dashboard', icon: LayoutDashboard, href: '/dashboard' },
-    { label: 'Leads', icon: Users, href: '/contacts' },
+    { label: 'Inbox', icon: Inbox, href: '/inbox' },
     { label: 'Captar Leads', icon: Target, href: '/lead-finder' },
+    { label: 'Leads', icon: Users, href: '/contacts' },
     { label: 'Templates', icon: Mail, href: '/templates' },
     { label: 'Campaigns', icon: Calendar, href: '/campaigns' },
     { label: 'Email Blasts', icon: Send, href: '/blasts' },
@@ -45,9 +48,9 @@ export default function Sidebar({ profileName, userEmail }: SidebarProps) {
 
   return (
     <aside
-      className={`bg-[#002B6A] m-0 rounded-l-none rounded-r-2xl flex flex-col justify-between h-full shadow-xl shadow-blue-950/10 border-r border-[#061A40]/15 transition-all duration-300 ease-in-out shrink-0 relative ${
-        isCollapsed ? 'w-20' : 'w-64'
-      }`}
+      className={`bg-[#002B6A] m-0 rounded-l-none rounded-r-2xl flex flex-col justify-between h-full shadow-xl shadow-blue-950/10 border-r border-[#061A40]/15 transition-all duration-305 ease-in-out shrink-0 fixed lg:relative inset-y-0 left-0 z-50 ${
+        mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+      } ${isCollapsed ? 'w-20' : 'w-64'}`}
     >
       <div className="flex flex-col justify-between h-full w-full overflow-hidden rounded-r-2xl">
         <div>
@@ -81,6 +84,7 @@ export default function Sidebar({ profileName, userEmail }: SidebarProps) {
                 <Link
                   key={item.href}
                   href={item.href}
+                  onClick={() => onClose?.()}
                   title={isCollapsed ? item.label : undefined}
                   className={`flex items-center rounded-lg font-medium transition-all duration-205 group h-11 px-3.5 ${
                     isCollapsed ? 'justify-center' : 'gap-3 text-sm'
@@ -117,6 +121,7 @@ export default function Sidebar({ profileName, userEmail }: SidebarProps) {
                 <Link
                   key={item.href}
                   href={item.href}
+                  onClick={() => onClose?.()}
                   title={isCollapsed ? item.label : undefined}
                   className={`flex items-center rounded-lg font-medium transition-all duration-205 group h-11 px-3.5 ${
                     isCollapsed ? 'justify-center' : 'gap-3 text-sm'
@@ -180,7 +185,7 @@ export default function Sidebar({ profileName, userEmail }: SidebarProps) {
       <button
         type="button"
         onClick={() => setIsCollapsed(!isCollapsed)}
-        className="absolute top-1/2 right-0 translate-x-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-[#002B6A] border border-[#2D6BFF] text-blue-200 hover:text-white hover:bg-[#2D6BFF] flex items-center justify-center shadow-lg transition-all focus:outline-none z-50 cursor-pointer"
+        className="hidden lg:flex absolute top-1/2 right-0 translate-x-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-[#002B6A] border border-[#2D6BFF] text-blue-200 hover:text-white hover:bg-[#2D6BFF] flex items-center justify-center shadow-lg transition-all focus:outline-none z-50 cursor-pointer"
         title={isCollapsed ? 'Expandir' : 'Recolher'}
       >
         {isCollapsed ? (
