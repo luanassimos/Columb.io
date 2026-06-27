@@ -1318,7 +1318,7 @@ export default function LeadFinderClient({
                     </td>
 
                     {/* Name */}
-                    <td className="px-4 py-3 font-semibold text-[#002B6A] whitespace-nowrap">
+                    <td className="px-4 py-3 font-semibold text-[#002B6A] max-w-[200px] truncate" title={lead.name}>
                       {lead.name}
                     </td>
 
@@ -1353,9 +1353,9 @@ export default function LeadFinderClient({
                     </td>
 
                     {/* Address */}
-                    <td className="px-4 py-3 text-xs max-w-xs truncate text-[#475569]">
+                    <td className="px-4 py-3 text-xs text-[#475569] max-w-[200px] truncate" title={lead.address || ''}>
                       {lead.address ? (
-                        <span className="flex items-center gap-1.5 title={lead.address}">
+                        <span className="flex items-center gap-1.5">
                           <MapPin className="h-3.5 w-3.5 text-[#475569]/55 shrink-0" />
                           <span className="truncate">{lead.address}</span>
                         </span>
@@ -1378,16 +1378,7 @@ export default function LeadFinderClient({
 
                     {/* Score (Quality Grade and Score) */}
                     <td className="px-4 py-3 whitespace-nowrap">
-                      {lead.contact_status === 'pending' ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[10px] font-semibold animate-pulse">
-                          <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
-                          ⏳ Pendente
-                        </span>
-                      ) : lead.contact_status === 'failed' ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-50 border border-rose-100 text-rose-600 text-[10px] font-semibold">
-                          ❌ Falhou
-                        </span>
-                      ) : (
+                      <div className="flex flex-col gap-0.5">
                         <span className="flex items-center gap-1.5 font-bold text-xs">
                           <span className={`h-2.5 w-2.5 rounded-full ${
                             lead.lead_grade === 'A' ? 'bg-emerald-500' :
@@ -1404,7 +1395,13 @@ export default function LeadFinderClient({
                             {lead.lead_grade || 'D'} — {lead.lead_score || 0}
                           </span>
                         </span>
-                      )}
+                        {lead.contact_status === 'pending' && (
+                          <span className="text-[9px] text-slate-400 italic">⏳ Enriquecendo...</span>
+                        )}
+                        {lead.contact_status === 'failed' && (
+                          <span className="text-[9px] text-rose-400 italic">❌ Falhou</span>
+                        )}
+                      </div>
                     </td>
 
                     {/* Captured at date */}
