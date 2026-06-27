@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { createClient } from '@supabase/supabase-js';
 import ws from 'ws';
+import { calculateLeadScore } from '../lib/lead-scoring';
 
 // 1. Manually load environment variables from .env.local
 function loadEnvLocal() {
@@ -310,6 +311,8 @@ async function runScraper(
       let website: string | null = null;
       let address: string | null = null;
       let parsedCategory: string | null = null;
+      let rating: number | null = null;
+      let reviewsCount: number | null = null;
 
       // 1. Try to click the card to load detail panel on the right side
       try {
@@ -322,7 +325,7 @@ async function runScraper(
         console.warn(`[Scraper] Erro ao clicar no card ${i + 1}:`, clickErr);
       }
 
-      // 2. Try to extract phone, website, and address from the right-side detail panel using multiple selectors
+      // 2. Try to extract phone, website, address, rating and reviews from the right-side detail panel using multiple selectors
       try {
         const phoneButton = page.locator('button[data-item-id^="phone:tel:"], [data-tooltip="Copiar número de telefone"], button[aria-label^="Telefone:"]');
         if (await phoneButton.count() > 0) {
@@ -348,6 +351,23 @@ async function runScraper(
           const addressTxt = await addressButton.first().innerText();
           if (addressTxt && addressTxt.trim()) {
             address = addressTxt.trim();
+          }
+        }
+
+        const ratingContainer = page.locator('div.F7nice');
+        if (await ratingContainer.count() > 0) {
+          const text = await ratingContainer.first().innerText();
+          const match = text.match(/([345][.,]\d)\s*(?:\(([\d.,kK]+)\))?/);
+          if (match) {
+            rating = parseFloat(match[1].replace(',', '.'));
+            if (match[2]) {
+              const rawReviews = match[2];
+              if (rawReviews.toLowerCase().includes('k')) {
+                reviewsCount = Math.round(parseFloat(rawReviews.toLowerCase().replace('k', '').replace(',', '.')) * 1000);
+              } else {
+                reviewsCount = parseInt(rawReviews.replace(/\D/g, ''), 10);
+              }
+            }
           }
         }
       } catch (panelErr) {
@@ -436,7 +456,18 @@ async function runScraper(
                 if (partPhone && !phone) {
                   phone = partPhone;
                 } else if (isRating(part)) {
-                  // ignore
+                  const match = part.match(/([345][.,]\d)\s*(?:\(([\d.,kK]+)\))?/);
+                  if (match) {
+                    rating = parseFloat(match[1].replace(',', '.'));
+                    if (match[2]) {
+                      const rawRevs = match[2];
+                      if (rawRevs.toLowerCase().includes('k')) {
+                        reviewsCount = Math.round(parseFloat(rawRevs.toLowerCase().replace('k', '').replace(',', '.')) * 1000);
+                      } else {
+                        reviewsCount = parseInt(rawRevs.replace(/\D/g, ''), 10);
+                      }
+                    }
+                  }
                 } else if (isAddress(part) && !address) {
                   address = part;
                 } else if (isCategory(part) && !parsedCategory) {
@@ -444,7 +475,20 @@ async function runScraper(
                 }
               }
             } else {
-              if (isAddress(line) && !address) {
+              if (isRating(line)) {
+                const match = line.match(/([345][.,]\d)\s*(?:\(([\d.,kK]+)\))?/);
+                if (match) {
+                  rating = parseFloat(match[1].replace(',', '.'));
+                  if (match[2]) {
+                    const rawRevs = match[2];
+                    if (rawRevs.toLowerCase().includes('k')) {
+                      reviewsCount = Math.round(parseFloat(rawRevs.toLowerCase().replace('k', '').replace(',', '.')) * 1000);
+                    } else {
+                      reviewsCount = parseInt(rawRevs.replace(/\D/g, ''), 10);
+                    }
+                  }
+                }
+              } else if (isAddress(line) && !address) {
                 address = line;
               } else if (isCategory(line) && !parsedCategory) {
                 parsedCategory = line;
@@ -515,9 +559,11 @@ async function runScraper(
         lat: leadLat,
         lng: leadLng,
         maps_url: href || null,
+        rating,
+        reviews_count: reviewsCount,
       };
 
-      console.log(`[Scraper] [Rápido] Extraído: "${lead.name}" | Fone: ${lead.phone || 'N/A'} | Web: ${lead.website || 'N/A'} | E-mail: ${lead.email} | Endereço: ${lead.address || 'N/A'} | Geo: ${leadLat}, ${leadLng}`);
+      console.log(`[Scraper] [Rápido] Extraído: "${lead.name}" | Fone: ${lead.phone || 'N/A'} | Web: ${lead.website || 'N/A'} | E-mail: ${lead.email} | Endereço: ${lead.address || 'N/A'} | Rating: ${lead.rating || 'N/A'} | Reviews: ${lead.reviews_count || 'N/A'} | Geo: ${leadLat}, ${leadLng}`);
       
       // Callback to save to DB and update progress
       const saved = await onProgress(savedCount + 1, lead);
@@ -590,6 +636,16 @@ async function processQueue() {
         job.radius,
         job.only_email ?? false,
         async (progress, lead) => {
+          // Calculate score and grade at ingestion
+          const scoreInfo = calculateLeadScore({
+            phone: lead.phone,
+            website: lead.website,
+            address: lead.address,
+            category: lead.category,
+            rating: lead.rating,
+            reviews_count: lead.reviews_count,
+          });
+
           // Save the lead in database
           const { error: leadError } = await supabase.from('leads').insert({
             workspace_id: job.workspace_id,
@@ -605,6 +661,11 @@ async function processQueue() {
             email: lead.email || null,
             maps_url: lead.maps_url || null,
             contact_status: 'pending',
+            rating: lead.rating || null,
+            reviews_count: lead.reviews_count || null,
+            lead_score: scoreInfo.lead_score,
+            lead_grade: scoreInfo.lead_grade,
+            scoring_version: 1,
           });
 
           if (leadError) {

@@ -212,3 +212,61 @@ export async function deleteLeads(leadIds: string[]) {
   revalidatePath('/lead-finder');
   return { success: true, count: leadIds.length };
 }
+
+export async function recalculateLeadsScore() {
+  const context = await getActiveWorkspaceContext();
+  if ('error' in context) return { error: context.error };
+
+  const permissionError = assertPermission(context.role, 'manageContacts');
+  if (permissionError) return permissionError;
+
+  const { supabase, workspaceId } = context;
+
+  // 1. Fetch all leads for this workspace
+  const { data: leads, error: fetchError } = await supabase
+    .from('leads')
+    .select('id, phone, website, address, category, rating, reviews_count')
+    .eq('workspace_id', workspaceId);
+
+  if (fetchError) {
+    console.error('Error fetching leads to rescore:', fetchError);
+    return { error: 'Erro ao buscar leads para recalcular score.' };
+  }
+
+  if (!leads || leads.length === 0) {
+    return { success: true, count: 0 };
+  }
+
+  // Import calculateLeadScore
+  const { calculateLeadScore } = await import('@/lib/lead-scoring');
+
+  // 2. Update each lead
+  const chunkSize = 10;
+  let updatedCount = 0;
+
+  for (let i = 0; i < leads.length; i += chunkSize) {
+    const chunk = leads.slice(i, i + chunkSize);
+    await Promise.all(
+      chunk.map(async (lead) => {
+        const scoreInfo = calculateLeadScore(lead);
+        const { error: updateError } = await supabase
+          .from('leads')
+          .update({
+            lead_score: scoreInfo.lead_score,
+            lead_grade: scoreInfo.lead_grade,
+            scoring_version: 1,
+          })
+          .eq('id', lead.id);
+
+        if (!updateError) {
+          updatedCount++;
+        } else {
+          console.error(`Error updating score for lead ${lead.id}:`, updateError);
+        }
+      })
+    );
+  }
+
+  revalidatePath('/lead-finder');
+  return { success: true, count: updatedCount };
+}

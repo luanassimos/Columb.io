@@ -22,7 +22,7 @@ import {
   Trash2,
   Info
 } from 'lucide-react';
-import { createLeadJob, importLeadsToContacts, deleteLeads } from '@/app/actions/lead-finder';
+import { createLeadJob, importLeadsToContacts, deleteLeads, recalculateLeadsScore } from '@/app/actions/lead-finder';
 import { WorkspaceRole } from '@/lib/permissions';
 
 interface Lead {
@@ -42,6 +42,11 @@ interface Lead {
   contact_status?: 'pending' | 'completed' | 'failed';
   primary_contact?: string | null;
   contact_notes?: string | null;
+  rating?: number | null;
+  reviews_count?: number | null;
+  lead_score?: number;
+  lead_grade?: 'A' | 'B' | 'C' | 'D';
+  scoring_version?: number;
 }
 
 interface LeadFinderClientProps {
@@ -50,7 +55,7 @@ interface LeadFinderClientProps {
   role: WorkspaceRole;
 }
 
-type SortKey = 'name' | 'phone' | 'website' | 'address' | 'created_at';
+type SortKey = 'name' | 'phone' | 'website' | 'address' | 'created_at' | 'lead_score';
 type SortDir = 'asc' | 'desc';
 
 const SUGGESTED_CATEGORIES_PT = [
@@ -109,7 +114,7 @@ export default function LeadFinderClient({
   );
   const [limitCount, setLimitCount] = useState(10);
   const [onlyEmail, setOnlyEmail] = useState(false);
-  const [contactFilter, setContactFilter] = useState<'all' | 'completed' | 'pending' | 'failed'>('all');
+  const [scoreFilter, setScoreFilter] = useState<'all' | 'only_a' | 'only_b_plus' | 'score_70' | 'score_50' | 'pending'>('all');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -573,6 +578,23 @@ export default function LeadFinderClient({
     }
   };
 
+  const [isRescoring, setIsRescoring] = useState(false);
+
+  const handleRecalculateScores = async () => {
+    setIsRescoring(true);
+    setIsActionsOpen(false);
+    const res = await recalculateLeadsScore();
+    setIsRescoring(false);
+    
+    if (res.error) {
+      alert('Erro ao recalcular scores: ' + res.error);
+    } else {
+      alert(`Scores recalculados com sucesso para ${res.count} leads.`);
+      setSelectedIds(new Set());
+      router.refresh();
+    }
+  };
+
   // Table filtering and sorting
   const filtered = leads
     .filter(l => {
@@ -589,20 +611,31 @@ export default function LeadFinderClient({
         if (!matchSearch) return false;
       }
 
-      // 2. Apply contact enrichment filter
-      if (contactFilter === 'completed') {
-        return l.contact_status === 'completed' && l.contact_quality === 3;
+      // 2. Apply lead score filters
+      if (scoreFilter === 'only_a') {
+        return l.lead_grade === 'A';
       }
-      if (contactFilter === 'pending') {
+      if (scoreFilter === 'only_b_plus') {
+        return l.lead_grade === 'A' || l.lead_grade === 'B';
+      }
+      if (scoreFilter === 'score_70') {
+        return (l.lead_score ?? 0) >= 70;
+      }
+      if (scoreFilter === 'score_50') {
+        return (l.lead_score ?? 0) >= 50;
+      }
+      if (scoreFilter === 'pending') {
         return l.contact_status === 'pending';
-      }
-      if (contactFilter === 'failed') {
-        return l.contact_status === 'failed';
       }
 
       return true;
     })
     .sort((a, b) => {
+      if (sortKey === 'lead_score') {
+        const av = a.lead_score || 0;
+        const bv = b.lead_score || 0;
+        return sortDir === 'asc' ? av - bv : bv - av;
+      }
       const av = (a[sortKey] ?? '') as string;
       const bv = (b[sortKey] ?? '') as string;
       return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
@@ -632,6 +665,19 @@ export default function LeadFinderClient({
       {label} <SortIcon col={col} />
     </button>
   );
+  // Calculate dashboard stats
+  const totalLeadsCount = leads.length;
+  const bestLead = leads.reduce((best, current) => {
+    return (current.lead_score || 0) > (best?.lead_score || 0) ? current : best;
+  }, null as Lead | null);
+
+  const averageScore = totalLeadsCount > 0
+    ? Math.round(leads.reduce((sum, current) => sum + (current.lead_score || 0), 0) / totalLeadsCount)
+    : 0;
+
+  const leadsA = leads.filter(l => l.lead_grade === 'A').length;
+  const leadsNoContact = leads.filter(l => !l.phone && !l.website && !l.email).length;
+
   return (
     <div className="space-y-6">
       {/* Animation Styles */}
@@ -1059,6 +1105,64 @@ export default function LeadFinderClient({
         </div>
       )}
 
+      {/* Dashboard Stats Grid */}
+      {leads.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          {/* Card 1: Melhor Lead */}
+          <div className="bg-white p-4 rounded-2xl border border-[#D8E0EA] shadow-xs flex flex-col justify-between h-24">
+            <span className="text-[10px] font-bold text-[#475569]/80 uppercase tracking-wider block">Melhor Lead</span>
+            <div className="flex items-baseline gap-1.5 min-w-0">
+              <span className="text-sm font-bold text-[#002B6A] truncate flex-1" title={bestLead?.name || 'N/A'}>
+                {bestLead?.name || 'N/A'}
+              </span>
+              {bestLead && (
+                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded-full shrink-0">
+                  {bestLead.lead_grade} — {bestLead.lead_score}
+                </span>
+              )}
+            </div>
+            <span className="text-[10px] text-[#475569]/70 block truncate">
+              {bestLead?.primary_contact || bestLead?.phone || bestLead?.website || 'Sem contato público'}
+            </span>
+          </div>
+
+          {/* Card 2: Score Médio */}
+          <div className="bg-white p-4 rounded-2xl border border-[#D8E0EA] shadow-xs flex flex-col justify-between h-24">
+            <span className="text-[10px] font-bold text-[#475569]/80 uppercase tracking-wider block">Score Médio</span>
+            <div className="text-lg font-extrabold text-[#002B6A] flex items-center gap-1.5">
+              {averageScore}
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                averageScore >= 90 ? 'text-emerald-700 bg-emerald-50 border border-emerald-100' :
+                averageScore >= 70 ? 'text-blue-700 bg-blue-50 border border-blue-100' :
+                averageScore >= 50 ? 'text-amber-700 bg-amber-50 border border-amber-100' :
+                'text-rose-700 bg-rose-50 border border-rose-100'
+              }`}>
+                {averageScore >= 90 ? 'A' : averageScore >= 70 ? 'B' : averageScore >= 50 ? 'C' : 'D'}
+              </span>
+            </div>
+            <span className="text-[10px] text-[#475569]/70 block">Média geral dos {totalLeadsCount} leads</span>
+          </div>
+
+          {/* Card 3: Leads A */}
+          <div className="bg-white p-4 rounded-2xl border border-[#D8E0EA] shadow-xs flex flex-col justify-between h-24">
+            <span className="text-[10px] font-bold text-[#475569]/80 uppercase tracking-wider block">Leads Classe A</span>
+            <div className="text-lg font-extrabold text-[#002B6A]">
+              {leadsA} <span className="text-xs text-[#475569] font-normal">/ {totalLeadsCount}</span>
+            </div>
+            <span className="text-[10px] text-[#475569]/70 block">Leads com nota máxima (90+)</span>
+          </div>
+
+          {/* Card 4: Leads Sem Contato */}
+          <div className="bg-white p-4 rounded-2xl border border-[#D8E0EA] shadow-xs flex flex-col justify-between h-24">
+            <span className="text-[10px] font-bold text-[#475569]/80 uppercase tracking-wider block">Leads Sem Contato</span>
+            <div className="text-lg font-extrabold text-[#002B6A]">
+              {leadsNoContact} <span className="text-xs text-[#475569] font-normal">/ {totalLeadsCount}</span>
+            </div>
+            <span className="text-[10px] text-[#475569]/70 block">Sem telefone, website ou e-mail</span>
+          </div>
+        </div>
+      )}
+
       {/* Leads List Table */}
       <div className="bg-white rounded-2xl border border-[#D8E0EA] overflow-hidden shadow-sm">
         {/* Table Toolbar */}
@@ -1109,6 +1213,15 @@ export default function LeadFinderClient({
                       <Trash2 className="h-3.5 w-3.5" />
                       Excluir Leads
                     </button>
+                    <button
+                      type="button"
+                      onClick={handleRecalculateScores}
+                      disabled={isRescoring}
+                      className="w-full text-left px-3 py-2 text-xs text-[#061A40] hover:bg-[#EAF2FF] transition-colors font-medium flex items-center gap-2 cursor-pointer border-t border-slate-100 disabled:opacity-50"
+                    >
+                      <Sparkles className="h-3.5 w-3.5 text-amber-500" />
+                      Recalcular Scores
+                    </button>
                   </div>
                 </>
               )}
@@ -1125,14 +1238,16 @@ export default function LeadFinderClient({
 
             {/* Contact Quality / Status Filter */}
             <select
-              value={contactFilter}
-              onChange={(e) => setContactFilter(e.target.value as any)}
-              className="px-3 py-1.5 text-xs rounded-lg border border-[#D8E0EA] bg-white text-[#061A40] focus:outline-none focus:border-[#2D6BFF] transition-all shrink-0 cursor-pointer"
+              value={scoreFilter}
+              onChange={(e) => setScoreFilter(e.target.value as any)}
+              className="px-3 py-1.5 text-xs rounded-lg border border-[#D8E0EA] bg-white text-[#061A40] focus:outline-none focus:border-[#2D6BFF] transition-all shrink-0 cursor-pointer font-semibold"
             >
-              <option value="all">Contato: Todos</option>
-              <option value="completed">🟢 Somente Completos</option>
-              <option value="pending">⏳ Pendentes</option>
-              <option value="failed">❌ Falhos</option>
+              <option value="all">Filtrar por Score: Todos</option>
+              <option value="only_a">🟢 Apenas Classe A (90+)</option>
+              <option value="only_b_plus">🔵 Apenas Classe B+ (70+)</option>
+              <option value="score_70">Score mínimo: 70</option>
+              <option value="score_50">Score mínimo: 50</option>
+              <option value="pending">⏳ Enriquecimento Pendente</option>
             </select>
           </div>
 
@@ -1162,7 +1277,7 @@ export default function LeadFinderClient({
                 <th className="px-4 py-3"><ThBtn col="website" label="Website" /></th>
                 <th className="px-4 py-3"><ThBtn col="address" label="Endereço" /></th>
                 <th className="px-4 py-3 text-xs font-semibold text-[#475569] uppercase tracking-wide">Busca Relacionada</th>
-                <th className="px-4 py-3 text-xs font-semibold text-[#475569] uppercase tracking-wide">Contato</th>
+                <th className="px-4 py-3"><ThBtn col="lead_score" label="Score" /></th>
                 <th className="px-4 py-3"><ThBtn col="created_at" label="Capturado em" /></th>
               </tr>
             </thead>
@@ -1249,28 +1364,33 @@ export default function LeadFinderClient({
                       </div>
                     </td>
 
-                    {/* Contato (Quality Badge) */}
+                    {/* Score (Quality Grade and Score) */}
                     <td className="px-4 py-3 whitespace-nowrap">
                       {lead.contact_status === 'pending' ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[10px] font-semibold">
-                          <span className="h-1.5 w-1.5 rounded-full bg-slate-400 animate-pulse" />
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[10px] font-semibold animate-pulse">
+                          <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
                           ⏳ Pendente
                         </span>
                       ) : lead.contact_status === 'failed' ? (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-50 border border-rose-100 text-rose-600 text-[10px] font-semibold">
                           ❌ Falhou
                         </span>
-                      ) : lead.contact_quality === 3 ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-100 text-emerald-700 text-[10px] font-semibold" title={lead.contact_notes || ''}>
-                          🟢 Completo
-                        </span>
-                      ) : lead.contact_quality === 1 || lead.contact_quality === 2 ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-100 text-amber-700 text-[10px] font-semibold" title={lead.contact_notes || ''}>
-                          🟡 Parcial
-                        </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 text-[10px] font-semibold" title={lead.contact_notes || ''}>
-                          🔴 Incompleto
+                        <span className="flex items-center gap-1.5 font-bold text-xs">
+                          <span className={`h-2.5 w-2.5 rounded-full ${
+                            lead.lead_grade === 'A' ? 'bg-emerald-500' :
+                            lead.lead_grade === 'B' ? 'bg-blue-500' :
+                            lead.lead_grade === 'C' ? 'bg-amber-500' :
+                            'bg-rose-500'
+                          }`} />
+                          <span className={`${
+                            lead.lead_grade === 'A' ? 'text-emerald-700' :
+                            lead.lead_grade === 'B' ? 'text-blue-700' :
+                            lead.lead_grade === 'C' ? 'text-amber-700' :
+                            'text-rose-700'
+                          }`}>
+                            {lead.lead_grade || 'D'} — {lead.lead_score || 0}
+                          </span>
                         </span>
                       )}
                     </td>
