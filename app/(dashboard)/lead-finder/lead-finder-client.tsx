@@ -386,6 +386,46 @@ export default function LeadFinderClient({
     setLatestJob(initialLatestJob);
   }, [initialLatestJob]);
 
+  // Auto-trigger enrichment when page loads with pending leads
+  const [isEnriching, setIsEnriching] = useState(false);
+  const enrichmentIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  const runEnrichmentBatch = async () => {
+    try {
+      const res = await fetch('/api/enrichment', { method: 'POST' });
+      if (!res.ok) return;
+      const data = await res.json();
+      // If no more pending, stop polling
+      if (data.processed === 0 && data.failed === 0) {
+        setIsEnriching(false);
+        if (enrichmentIntervalRef.current) {
+          clearInterval(enrichmentIntervalRef.current);
+          enrichmentIntervalRef.current = null;
+        }
+      }
+    } catch {
+      // Ignore network errors silently
+    }
+  };
+
+  useEffect(() => {
+    const hasPending = leads.some(l => l.contact_status === 'pending');
+    if (!hasPending) return;
+
+    // Start enrichment loop
+    setIsEnriching(true);
+    runEnrichmentBatch();
+    enrichmentIntervalRef.current = setInterval(runEnrichmentBatch, 8000);
+
+    return () => {
+      if (enrichmentIntervalRef.current) {
+        clearInterval(enrichmentIntervalRef.current);
+        enrichmentIntervalRef.current = null;
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
 
   // Polling for pending or running jobs
@@ -1347,12 +1387,37 @@ export default function LeadFinderClient({
             </select>
           </div>
 
+          {/* Enrichment status indicator */}
+          {isEnriching && (
+            <span className="flex items-center gap-1.5 text-[11px] font-semibold text-blue-600 bg-blue-50 border border-blue-100 px-2.5 py-1 rounded-full animate-pulse shrink-0">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Enriquecendo leads...
+            </span>
+          )}
+
+          {/* Manual enrichment trigger */}
+          {!isEnriching && leads.some(l => l.contact_status === 'pending') && (
+            <button
+              type="button"
+              onClick={() => {
+                setIsEnriching(true);
+                runEnrichmentBatch();
+                enrichmentIntervalRef.current = setInterval(runEnrichmentBatch, 8000);
+              }}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-blue-200 bg-blue-50 text-[11px] font-bold text-blue-600 hover:bg-blue-100 transition-all cursor-pointer shrink-0"
+            >
+              <Sparkles className="h-3 w-3" />
+              Enriquecer agora
+            </button>
+          )}
+
           {selectedIds.size > 0 && (
             <span className="text-xs text-[#475569] font-semibold bg-[#EAF2FF] px-2.5 py-1 rounded-full border border-[#2D6BFF]/20">
               {selectedIds.size} selecionados
             </span>
           )}
         </div>
+
 
         {/* Advanced Filters Panel */}
         {isFiltersOpen && (
