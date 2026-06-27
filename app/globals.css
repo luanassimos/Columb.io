@@ -431,4 +431,36 @@ h3 {
   .cloud-static::after, .cloud-static::before {
     background: #1e2e4d !important;
   }
+
+  /* Custom Inbox Dark Mode Overrides */
+  .inbox-tabs-container {
+    background-color: var(--secondary) !important;
+    border-color: var(--border) !important;
+  }
+  .inbox-tab-btn-active {
+    background-color: #1e2e4d !important;
+    color: #60a5fa !important;
+  }
+  .inbox-tab-btn-inactive {
+    color: #94a3b8 !important;
+  }
+  .inbox-tab-btn-inactive:hover {
+    color: #ffffff !important;
+  }
+  .inbox-delete-btn {
+    background-color: rgba(244, 63, 94, 0.15) !important;
+    border-color: rgba(244, 63, 94, 0.3) !important;
+    color: #fb7185 !important;
+  }
+  .inbox-delete-btn:hover {
+    background-color: rgba(244, 63, 94, 0.25) !important;
+  }
+  .inbox-outbound-card {
+    background-color: var(--card) !important;
+    border-color: var(--border) !important;
+  }
+  .inbox-inbound-card {
+    background-color: rgba(96, 165, 250, 0.1) !important;
+    border-color: rgba(96, 165, 250, 0.25) !important;
+  }
 }
