@@ -12,6 +12,7 @@ export interface CreateLeadJobInput {
   lat?: number;
   lng?: number;
   radius?: number; // in meters
+  onlyEmail?: boolean;
 }
 
 export async function createLeadJob(input: CreateLeadJobInput) {
@@ -53,6 +54,7 @@ export async function createLeadJob(input: CreateLeadJobInput) {
       lat: input.lat !== undefined ? input.lat : null,
       lng: input.lng !== undefined ? input.lng : null,
       radius: input.radius !== undefined ? input.radius : null,
+      only_email: input.onlyEmail ?? false,
     })
     .select('id')
     .single();

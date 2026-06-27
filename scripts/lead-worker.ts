@@ -50,6 +50,115 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey, {
 
 console.log('WORKER_LEADS_STARTED');
 
+async function scrapeEmailFromWebsite(url: string): Promise<string | null> {
+  if (!url) return null;
+  
+  const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,6}/g;
+  
+  const cleanEmail = (email: string): boolean => {
+    const lower = email.toLowerCase();
+    return !(
+      lower.endsWith('.png') ||
+      lower.endsWith('.jpg') ||
+      lower.endsWith('.jpeg') ||
+      lower.endsWith('.gif') ||
+      lower.endsWith('.webp') ||
+      lower.endsWith('.svg') ||
+      lower.endsWith('.css') ||
+      lower.endsWith('.js') ||
+      lower.includes('sentry') ||
+      lower.includes('bootstrap') ||
+      lower.includes('jquery') ||
+      lower.includes('wix') ||
+      lower.includes('wordpress') ||
+      lower.includes('domain') ||
+      lower.includes('example') ||
+      lower.includes('test')
+    );
+  };
+
+  const fetchHtml = async (targetUrl: string): Promise<string | null> => {
+    try {
+      const controller = new AbortController();
+      const id = setTimeout(() => controller.abort(), 6000); // 6 seconds timeout
+      
+      const response = await fetch(targetUrl, {
+        signal: controller.signal,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        },
+      });
+      clearTimeout(id);
+      if (!response.ok) return null;
+      return await response.text();
+    } catch {
+      return null;
+    }
+  };
+
+  let targetUrl = url.trim();
+  if (targetUrl.includes('google.com/url?')) {
+    try {
+      const urlObj = new URL(targetUrl);
+      const qParam = urlObj.searchParams.get('q');
+      if (qParam) targetUrl = qParam;
+    } catch {}
+  }
+  if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://')) {
+    targetUrl = 'https://' + targetUrl;
+  }
+
+  // 1. Scrape Homepage
+  const homepageHtml = await fetchHtml(targetUrl);
+  if (!homepageHtml) return null;
+
+  const homeMatches = homepageHtml.match(emailRegex);
+  if (homeMatches) {
+    const valid = homeMatches.filter(cleanEmail);
+    if (valid.length > 0) return valid[0].toLowerCase();
+  }
+
+  // 2. Look for Contact/About pages in the HTML links
+  try {
+    const linkRegex = /href=["']([^"']*(?:contato|contacto|contact|about|sobre|fale|atendimento)[^"']*)["']/gi;
+    const contactLinks: string[] = [];
+    let match;
+    while ((match = linkRegex.exec(homepageHtml)) !== null) {
+      let link = match[1];
+      if (link.startsWith('/') && !link.startsWith('//')) {
+        try {
+          const parsedBase = new URL(targetUrl);
+          link = `${parsedBase.origin}${link}`;
+        } catch {
+          continue;
+        }
+      } else if (!link.startsWith('http')) {
+        continue;
+      }
+      if (!contactLinks.includes(link)) {
+        contactLinks.push(link);
+      }
+      if (contactLinks.length >= 3) break;
+    }
+
+    for (const contactUrl of contactLinks) {
+      const pageHtml = await fetchHtml(contactUrl);
+      if (pageHtml) {
+        const pageMatches = pageHtml.match(emailRegex);
+        if (pageMatches) {
+          const valid = pageMatches.filter(cleanEmail);
+          if (valid.length > 0) return valid[0].toLowerCase();
+        }
+      }
+    }
+  } catch {
+    // Ignore crawling errors
+  }
+
+  return null;
+}
+
 async function runScraper(
   jobId: string,
   category: string,
@@ -58,7 +167,8 @@ async function runScraper(
   lat: number | null,
   lng: number | null,
   radius: number | null,
-  onProgress: (count: number, lead: any) => Promise<void>
+  onlyEmail: boolean,
+  onProgress: (count: number, lead: any) => Promise<boolean>
 ) {
   let url = '';
   if (lat !== null && lng !== null) {
@@ -110,12 +220,14 @@ async function runScraper(
   }
 
   // Scroll to load enough cards (1s delay for high speed)
-  while (currentCount < limitCount && scrollAttempts < maxScrollAttempts) {
+  // We load limitCount * 3 cards only if onlyEmail is active to have a solid pool, else just limitCount
+  const targetCardsToLoad = onlyEmail ? Math.min(limitCount * 3, 150) : limitCount;
+  while (currentCount < targetCardsToLoad && scrollAttempts < maxScrollAttempts) {
     const cards = page.locator('a[href*="/maps/place/"]');
     currentCount = await cards.count();
-    console.log(`[Scraper] Cards carregados: ${currentCount} / ${limitCount} (Tentativa de scroll: ${scrollAttempts})`);
+    console.log(`[Scraper] Cards carregados: ${currentCount} / ${targetCardsToLoad} (Tentativa de scroll: ${scrollAttempts})`);
 
-    if (currentCount >= limitCount || currentCount === previousCount) {
+    if (currentCount >= targetCardsToLoad || currentCount === previousCount) {
       break;
     }
 
@@ -137,10 +249,14 @@ async function runScraper(
 
   const cardsLocator = page.locator('a[href*="/maps/place/"]');
   const totalAvailable = await cardsLocator.count();
-  const countToScrape = Math.min(limitCount, totalAvailable);
-  console.log(`[Scraper] Iniciando extração rápida (sem clique) de ${countToScrape} estabelecimentos.`);
+  console.log(`[Scraper] Iniciando extração rápida (sem clique) de até ${totalAvailable} estabelecimentos.`);
 
-  for (let i = 0; i < countToScrape; i++) {
+  let savedCount = 0;
+  for (let i = 0; i < totalAvailable; i++) {
+    if (savedCount >= limitCount) {
+      console.log(`[Scraper] Limite de ${limitCount} leads com e-mail atingido. Encerrando.`);
+      break;
+    }
     try {
       // Check if job was cancelled
       const { data: jobStatus } = await supabase
@@ -309,22 +425,51 @@ async function runScraper(
         address = await container.locator("[data-value], .W4Efsd").first().innerText().catch(() => null);
       }
 
+      // Normalizing website link in case of Google redirect
+      if (website && website.includes('google.com/url?')) {
+        try {
+          const urlObj = new URL(website);
+          const qParam = urlObj.searchParams.get('q');
+          if (qParam) website = qParam;
+        } catch {}
+      }
+
+      // Try to scrape email from website
+      let email: string | null = null;
+      if (website) {
+        console.log(`[Scraper] [E-mail] Buscando e-mail em: ${website}`);
+        email = await scrapeEmailFromWebsite(website);
+        if (email) {
+          console.log(`[Scraper] [E-mail] Encontrado: ${email}`);
+        } else {
+          console.log(`[Scraper] [E-mail] Nenhum e-mail encontrado para: ${name}`);
+        }
+      }
+
+      if (onlyEmail && !email) {
+        console.log(`[Scraper] [Ignorado] Negócio "${name}" ignorado por falta de e-mail de contato.`);
+        continue;
+      }
+
       const lead = {
         name,
         phone: phone || null,
         address: address || null,
         website: website || null,
-        email: null, // Scraped emails are not fetched in this phase
+        email: email,
         category: parsedCategory || category,
         lat: leadLat,
         lng: leadLng,
         maps_url: href || null,
       };
 
-      console.log(`[Scraper] [Rápido] Extraído: "${lead.name}" | Fone: ${lead.phone || 'N/A'} | Web: ${lead.website || 'N/A'} | Endereço: ${lead.address || 'N/A'} | Geo: ${leadLat}, ${leadLng}`);
+      console.log(`[Scraper] [Rápido] Extraído: "${lead.name}" | Fone: ${lead.phone || 'N/A'} | Web: ${lead.website || 'N/A'} | E-mail: ${lead.email} | Endereço: ${lead.address || 'N/A'} | Geo: ${leadLat}, ${leadLng}`);
       
       // Callback to save to DB and update progress
-      await onProgress(i + 1, lead);
+      const saved = await onProgress(savedCount + 1, lead);
+      if (saved) {
+        savedCount++;
+      }
       
       // Small pause to yield loop execution
       await page.waitForTimeout(50);
@@ -389,6 +534,7 @@ async function processQueue() {
         job.lat,
         job.lng,
         job.radius,
+        job.only_email ?? false,
         async (progress, lead) => {
           // Save the lead in database
           const { error: leadError } = await supabase.from('leads').insert({
@@ -406,21 +552,25 @@ async function processQueue() {
             maps_url: lead.maps_url || null,
           });
 
-        if (leadError) {
-          console.error(`[Worker] Erro ao salvar lead "${lead.name}":`, leadError);
-        } else {
-          leadsSaved++;
+          if (leadError) {
+            console.error(`[Worker] Erro ao salvar lead "${lead.name}":`, leadError);
+            return false;
+          } else {
+            leadsSaved++;
+            
+            // Update progress in job
+            await supabase
+              .from('lead_finder_jobs')
+              .update({
+                progress_count: leadsSaved,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', job.id);
+              
+            return true;
+          }
         }
-
-        // Update progress in job
-        await supabase
-          .from('lead_finder_jobs')
-          .update({
-            progress_count: leadsSaved,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', job.id);
-      });
+      );
 
       // 4. Mark job as completed only if it wasn't cancelled
       const { data: finalJob } = await supabase

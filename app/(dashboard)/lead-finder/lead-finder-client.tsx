@@ -104,6 +104,7 @@ export default function LeadFinderClient({
     cat.toLowerCase().includes(category.toLowerCase())
   );
   const [limitCount, setLimitCount] = useState(10);
+  const [onlyEmail, setOnlyEmail] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -207,12 +208,15 @@ export default function LeadFinderClient({
     if (currentStage !== 'form') return;
     if (!mapContainerRef.current) return;
 
+    let active = true;
     let map: any = null;
     let marker: any = null;
     let circle: any = null;
 
     // Load Leaflet dynamically to avoid SSR errors
     import('leaflet').then((L) => {
+      if (!active) return;
+
       // Fix default marker icon path issue in Leaflet + NextJS
       const DefaultIcon = L.Icon.Default.prototype as any;
       delete DefaultIcon._getIconUrl;
@@ -262,6 +266,7 @@ export default function LeadFinderClient({
     });
 
     return () => {
+      active = false;
       if (map) {
         map.remove();
       }
@@ -272,20 +277,35 @@ export default function LeadFinderClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentStage]);
 
-  // Synchronize Leaflet map instances with React states
+  // Synchronize Leaflet map instances with React states defensively
   useEffect(() => {
     if (!mapInstance) return;
 
-    if (markerInstance) {
-      markerInstance.setLatLng([lat, lng]);
+    try {
+      if (markerInstance) {
+        const currentPos = markerInstance.getLatLng();
+        if (currentPos.lat !== lat || currentPos.lng !== lng) {
+          markerInstance.setLatLng([lat, lng]);
+        }
+      }
+      if (circleInstance) {
+        const currentPos = circleInstance.getLatLng();
+        if (currentPos.lat !== lat || currentPos.lng !== lng) {
+          circleInstance.setLatLng([lat, lng]);
+        }
+        if (circleInstance.getRadius() !== radius) {
+          circleInstance.setRadius(radius);
+        }
+      }
+      
+      // Smoothly pan map to new coordinates
+      const mapCenter = mapInstance.getCenter();
+      if (mapCenter.lat !== lat || mapCenter.lng !== lng) {
+        mapInstance.panTo([lat, lng]);
+      }
+    } catch (err) {
+      console.warn('Erro ao sincronizar Leaflet:', err);
     }
-    if (circleInstance) {
-      circleInstance.setLatLng([lat, lng]);
-      circleInstance.setRadius(radius);
-    }
-    
-    // Smoothly pan map to new coordinates
-    mapInstance.panTo([lat, lng]);
   }, [lat, lng, radius, mapInstance, markerInstance, circleInstance]);
 
   // Geocode region text to map coordinates
@@ -405,6 +425,7 @@ export default function LeadFinderClient({
       lat: !isNaN(lat) ? lat : undefined,
       lng: !isNaN(lng) ? lng : undefined,
       radius: radius || undefined,
+      onlyEmail: onlyEmail,
     });
     setIsSubmitting(false);
 
@@ -764,6 +785,21 @@ export default function LeadFinderClient({
                       className="w-full h-1 mt-2.5 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-[#2D6BFF] disabled:opacity-50"
                     />
                   </div>
+                </div>
+
+                {/* Checkbox: Apenas com E-mail */}
+                <div className="flex items-center gap-2 py-1">
+                  <input
+                    type="checkbox"
+                    id="onlyEmail"
+                    checked={onlyEmail}
+                    onChange={(e) => setOnlyEmail(e.target.checked)}
+                    disabled={latestJob?.status === 'pending' || latestJob?.status === 'running'}
+                    className="h-4 w-4 rounded border-[#D8E0EA] text-[#2D6BFF] focus:ring-[#2D6BFF] cursor-pointer"
+                  />
+                  <label htmlFor="onlyEmail" className="text-xs font-semibold text-[#002B6A] cursor-pointer select-none">
+                    Apenas leads com e-mail de contato encontrado
+                  </label>
                 </div>
 
                 {formError && (
