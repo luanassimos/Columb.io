@@ -636,7 +636,87 @@ async function processQueue() {
         job.radius,
         job.only_email ?? false,
         async (progress, lead) => {
-          // Calculate score and grade at ingestion
+          // 1. Check if lead with same name and workspace_id already exists in this workspace
+          const { data: existingLeads, error: findError } = await supabase
+            .from('leads')
+            .select('*')
+            .eq('workspace_id', job.workspace_id)
+            .eq('name', lead.name)
+            .limit(1);
+
+          if (findError) {
+            console.error(`[Worker] Erro ao pesquisar lead existente "${lead.name}":`, findError);
+          }
+
+          const existingLead = existingLeads && existingLeads.length > 0 ? existingLeads[0] : null;
+
+          if (existingLead) {
+            // Check if there is any new or different data
+            let needsUpdate = false;
+            const updatePayload: any = {};
+
+            if (lead.phone && lead.phone !== existingLead.phone) {
+              needsUpdate = true;
+              updatePayload.phone = lead.phone;
+            }
+            if (lead.website && lead.website !== existingLead.website) {
+              needsUpdate = true;
+              updatePayload.website = lead.website;
+            }
+            if (lead.address && lead.address !== existingLead.address) {
+              needsUpdate = true;
+              updatePayload.address = lead.address;
+            }
+            if (lead.email && lead.email !== existingLead.email) {
+              needsUpdate = true;
+              updatePayload.email = lead.email;
+            }
+            if (lead.rating !== null && lead.rating !== existingLead.rating) {
+              needsUpdate = true;
+              updatePayload.rating = lead.rating;
+            }
+            if (lead.reviews_count !== null && lead.reviews_count !== existingLead.reviews_count) {
+              needsUpdate = true;
+              updatePayload.reviews_count = lead.reviews_count;
+            }
+
+            if (needsUpdate) {
+              // Recalculate score with combined data
+              const combinedLead = {
+                phone: updatePayload.phone !== undefined ? updatePayload.phone : existingLead.phone,
+                website: updatePayload.website !== undefined ? updatePayload.website : existingLead.website,
+                address: updatePayload.address !== undefined ? updatePayload.address : existingLead.address,
+                category: existingLead.category,
+                rating: updatePayload.rating !== undefined ? updatePayload.rating : existingLead.rating,
+                reviews_count: updatePayload.reviews_count !== undefined ? updatePayload.reviews_count : existingLead.reviews_count,
+              };
+
+              const scoreInfo = calculateLeadScore(combinedLead);
+              
+              updatePayload.lead_score = scoreInfo.lead_score;
+              updatePayload.lead_grade = scoreInfo.lead_grade;
+              updatePayload.scoring_version = 1;
+              updatePayload.contact_status = 'pending'; // Re-trigger contact enrichment for updated fields
+
+              console.log(`[Worker] Atualizando lead existente "${lead.name}" com novos dados.`);
+              const { error: updateError } = await supabase
+                .from('leads')
+                .update(updatePayload)
+                .eq('id', existingLead.id);
+
+              if (updateError) {
+                console.error(`[Worker] Erro ao atualizar lead "${lead.name}":`, updateError);
+                return false;
+              }
+              leadsSaved++;
+              return true;
+            } else {
+              console.log(`[Worker] Lead "${lead.name}" já existe com dados idênticos/completos. Ignorando.`);
+              return true; // Avoid saving duplicates, return true so progress continues
+            }
+          }
+
+          // 2. Lead does not exist, calculate score and insert new record
           const scoreInfo = calculateLeadScore({
             phone: lead.phone,
             website: lead.website,
@@ -646,7 +726,6 @@ async function processQueue() {
             reviews_count: lead.reviews_count,
           });
 
-          // Save the lead in database
           const { error: leadError } = await supabase.from('leads').insert({
             workspace_id: job.workspace_id,
             job_id: job.id,
