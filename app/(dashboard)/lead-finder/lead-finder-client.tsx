@@ -38,6 +38,10 @@ interface Lead {
   lng?: number | null;
   email?: string | null;
   maps_url?: string | null;
+  contact_quality?: number;
+  contact_status?: 'pending' | 'completed' | 'failed';
+  primary_contact?: string | null;
+  contact_notes?: string | null;
 }
 
 interface LeadFinderClientProps {
@@ -105,6 +109,7 @@ export default function LeadFinderClient({
   );
   const [limitCount, setLimitCount] = useState(10);
   const [onlyEmail, setOnlyEmail] = useState(false);
+  const [contactFilter, setContactFilter] = useState<'all' | 'completed' | 'pending' | 'failed'>('all');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -571,16 +576,31 @@ export default function LeadFinderClient({
   // Table filtering and sorting
   const filtered = leads
     .filter(l => {
-      if (!search) return true;
-      const q = search.toLowerCase();
-      return (
-        l.name.toLowerCase().includes(q) ||
-        (l.phone?.toLowerCase().includes(q) ?? false) ||
-        (l.website?.toLowerCase().includes(q) ?? false) ||
-        (l.address?.toLowerCase().includes(q) ?? false) ||
-        l.category.toLowerCase().includes(q) ||
-        l.region.toLowerCase().includes(q)
-      );
+      // 1. Apply search filter
+      if (search) {
+        const q = search.toLowerCase();
+        const matchSearch =
+          l.name.toLowerCase().includes(q) ||
+          (l.phone?.toLowerCase().includes(q) ?? false) ||
+          (l.website?.toLowerCase().includes(q) ?? false) ||
+          (l.address?.toLowerCase().includes(q) ?? false) ||
+          l.category.toLowerCase().includes(q) ||
+          l.region.toLowerCase().includes(q);
+        if (!matchSearch) return false;
+      }
+
+      // 2. Apply contact enrichment filter
+      if (contactFilter === 'completed') {
+        return l.contact_status === 'completed' && l.contact_quality === 3;
+      }
+      if (contactFilter === 'pending') {
+        return l.contact_status === 'pending';
+      }
+      if (contactFilter === 'failed') {
+        return l.contact_status === 'failed';
+      }
+
+      return true;
     })
     .sort((a, b) => {
       const av = (a[sortKey] ?? '') as string;
@@ -1102,6 +1122,18 @@ export default function LeadFinderClient({
               placeholder="Buscar na listagem de leads..."
               className="w-full max-w-sm px-3 py-1.5 rounded-lg border border-[#D8E0EA] bg-[#F7FAFF] text-sm text-[#061A40] placeholder-[#475569]/50 focus:outline-none focus:border-[#2D6BFF] transition-all"
             />
+
+            {/* Contact Quality / Status Filter */}
+            <select
+              value={contactFilter}
+              onChange={(e) => setContactFilter(e.target.value as any)}
+              className="px-3 py-1.5 text-xs rounded-lg border border-[#D8E0EA] bg-white text-[#061A40] focus:outline-none focus:border-[#2D6BFF] transition-all shrink-0 cursor-pointer"
+            >
+              <option value="all">Contato: Todos</option>
+              <option value="completed">🟢 Somente Completos</option>
+              <option value="pending">⏳ Pendentes</option>
+              <option value="failed">❌ Falhos</option>
+            </select>
           </div>
 
           {selectedIds.size > 0 && (
@@ -1130,13 +1162,14 @@ export default function LeadFinderClient({
                 <th className="px-4 py-3"><ThBtn col="website" label="Website" /></th>
                 <th className="px-4 py-3"><ThBtn col="address" label="Endereço" /></th>
                 <th className="px-4 py-3 text-xs font-semibold text-[#475569] uppercase tracking-wide">Busca Relacionada</th>
+                <th className="px-4 py-3 text-xs font-semibold text-[#475569] uppercase tracking-wide">Contato</th>
                 <th className="px-4 py-3"><ThBtn col="created_at" label="Capturado em" /></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#D8E0EA]">
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-12 text-center text-[#475569]">
+                  <td colSpan={8} className="px-4 py-12 text-center text-[#475569]">
                     Nenhum lead capturado ou correspondente à busca.
                   </td>
                 </tr>
@@ -1214,6 +1247,32 @@ export default function LeadFinderClient({
                           {lead.region}
                         </span>
                       </div>
+                    </td>
+
+                    {/* Contato (Quality Badge) */}
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      {lead.contact_status === 'pending' ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[10px] font-semibold">
+                          <span className="h-1.5 w-1.5 rounded-full bg-slate-400 animate-pulse" />
+                          ⏳ Pendente
+                        </span>
+                      ) : lead.contact_status === 'failed' ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-50 border border-rose-100 text-rose-600 text-[10px] font-semibold">
+                          ❌ Falhou
+                        </span>
+                      ) : lead.contact_quality === 3 ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-100 text-emerald-700 text-[10px] font-semibold" title={lead.contact_notes || ''}>
+                          🟢 Completo
+                        </span>
+                      ) : lead.contact_quality === 1 || lead.contact_quality === 2 ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-100 text-amber-700 text-[10px] font-semibold" title={lead.contact_notes || ''}>
+                          🟡 Parcial
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 text-[10px] font-semibold" title={lead.contact_notes || ''}>
+                          🔴 Incompleto
+                        </span>
+                      )}
                     </td>
 
                     {/* Captured at date */}

@@ -550,6 +550,7 @@ async function processQueue() {
             lng: lead.lng || null,
             email: lead.email || null,
             maps_url: lead.maps_url || null,
+            contact_status: 'pending',
           });
 
           if (leadError) {
