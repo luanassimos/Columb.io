@@ -201,8 +201,8 @@ async function runScraper(
   // Set viewport size
   await page.setViewportSize({ width: 1280, height: 800 });
 
-  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
-
+  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+  await page.waitForTimeout(3000);
   console.log('[Scraper] Página do Google Maps carregada. Rolando feed rápido...');
 
   const feedSelector = 'div[role="feed"]';
