@@ -225,7 +225,7 @@ export async function recalculateLeadsScore() {
   // 1. Fetch all leads for this workspace
   const { data: leads, error: fetchError } = await supabase
     .from('leads')
-    .select('id, phone, website, address, category, rating, reviews_count')
+    .select('id, phone, website, address, category, rating, reviews_count, contact_channels')
     .eq('workspace_id', workspaceId);
 
   if (fetchError) {
@@ -249,12 +249,53 @@ export async function recalculateLeadsScore() {
     await Promise.all(
       chunk.map(async (lead) => {
         const scoreInfo = calculateLeadScore(lead);
+        
+        // Calculate contact intelligence
+        const channels = (lead.contact_channels || {}) as any;
+        let contactScore = 0;
+        let reachabilityScore = 0;
+
+        const hasPhone = !!lead.phone && lead.phone.trim().length > 0;
+        const hasWebsite = !!lead.website && lead.website.trim().length > 0;
+        const hasForm = !!channels.contact_form;
+        const hasInsta = !!channels.instagram;
+        const hasFb = !!channels.facebook;
+        const hasWa = !!channels.whatsapp;
+
+        // Contact Score
+        if (hasPhone) contactScore += 30;
+        if (hasWebsite) contactScore += 20;
+        if (hasForm) contactScore += 20;
+        if (hasInsta) contactScore += 10;
+        if (hasFb) contactScore += 10;
+        if (hasWa) contactScore += 10;
+        contactScore = Math.min(contactScore, 100);
+
+        // Reachability Score
+        if (hasPhone) reachabilityScore += 40;
+        if (hasWebsite) reachabilityScore += 15;
+        if (hasInsta) reachabilityScore += 15;
+        if (hasForm) reachabilityScore += 20;
+        if (hasWa) reachabilityScore += 10;
+        reachabilityScore = Math.min(reachabilityScore, 100);
+
+        // Quality Grade
+        let quality: 'low' | 'medium' | 'high' = 'low';
+        if (reachabilityScore >= 80) {
+          quality = 'high';
+        } else if (reachabilityScore >= 30) {
+          quality = 'medium';
+        }
+
         const { error: updateError } = await supabase
           .from('leads')
           .update({
             lead_score: scoreInfo.lead_score,
             lead_grade: scoreInfo.lead_grade,
             scoring_version: 1,
+            contact_score: contactScore,
+            reachability_score: reachabilityScore,
+            contact_quality: quality,
           })
           .eq('id', lead.id);
 

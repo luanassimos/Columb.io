@@ -539,9 +539,9 @@ async function runScraper(
         } catch {}
       }
 
-      // Try to scrape email from website
+      // Try to scrape email from website ONLY if onlyEmail option is enabled
       let email: string | null = null;
-      if (website) {
+      if (onlyEmail && website) {
         console.log(`[Scraper] [E-mail] Buscando e-mail em: ${website}`);
         email = await scrapeEmailFromWebsite(website);
         if (email) {

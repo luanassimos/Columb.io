@@ -20,7 +20,10 @@ import {
   ChevronUp,
   X,
   Trash2,
-  Info
+  Info,
+  MessageCircle,
+  Mail,
+  FileText
 } from 'lucide-react';
 import { createLeadJob, importLeadsToContacts, deleteLeads, recalculateLeadsScore } from '@/app/actions/lead-finder';
 import { WorkspaceRole } from '@/lib/permissions';
@@ -38,7 +41,7 @@ interface Lead {
   lng?: number | null;
   email?: string | null;
   maps_url?: string | null;
-  contact_quality?: number;
+  contact_quality?: 'low' | 'medium' | 'high';
   contact_status?: 'pending' | 'completed' | 'failed';
   primary_contact?: string | null;
   contact_notes?: string | null;
@@ -47,6 +50,17 @@ interface Lead {
   lead_score?: number;
   lead_grade?: 'A' | 'B' | 'C' | 'D';
   scoring_version?: number;
+  contact_score?: number;
+  reachability_score?: number;
+  contact_channels?: {
+    phone?: string;
+    website?: string;
+    instagram?: string;
+    facebook?: string;
+    whatsapp?: string;
+    contact_form?: boolean;
+    email?: string;
+  };
 }
 
 interface LeadFinderClientProps {
@@ -55,7 +69,7 @@ interface LeadFinderClientProps {
   role: WorkspaceRole;
 }
 
-type SortKey = 'name' | 'phone' | 'website' | 'address' | 'created_at' | 'lead_score';
+type SortKey = 'name' | 'phone' | 'website' | 'address' | 'created_at' | 'lead_score' | 'reachability_score';
 type SortDir = 'asc' | 'desc';
 
 const SUGGESTED_CATEGORIES_PT = [
@@ -118,6 +132,14 @@ export default function LeadFinderClient({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+
+  // Contact Intelligence filters state
+  const [isFiltersOpen, setIsFiltersOpen] = useState(false);
+  const [filterPhone, setFilterPhone] = useState(false);
+  const [filterWebsite, setFilterWebsite] = useState(false);
+  const [filterForm, setFilterForm] = useState(false);
+  const [minReachability, setMinReachability] = useState<number>(0);
+  const [minContactScore, setMinContactScore] = useState<number>(0);
   // Advanced Geotargeted states
   const [lat, setLat] = useState(-22.9068); // Default Rio de Janeiro
   const [lng, setLng] = useState(-43.1729);
@@ -357,7 +379,7 @@ export default function LeadFinderClient({
   // Reset page when filters or list changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, scoreFilter, leads]);
+  }, [search, scoreFilter, leads, filterPhone, filterWebsite, filterForm, minReachability, minContactScore]);
 
   // Sync latestJob from props initially
   useEffect(() => {
@@ -633,12 +655,24 @@ export default function LeadFinderClient({
         return l.contact_status === 'pending';
       }
 
+      // 3. Apply contact intelligence filters
+      if (filterPhone && !l.phone) return false;
+      if (filterWebsite && !l.website) return false;
+      if (filterForm && !((l.contact_channels as any)?.contact_form)) return false;
+      if ((l.reachability_score ?? 0) < minReachability) return false;
+      if ((l.contact_score ?? 0) < minContactScore) return false;
+
       return true;
     })
     .sort((a, b) => {
       if (sortKey === 'lead_score') {
         const av = a.lead_score || 0;
         const bv = b.lead_score || 0;
+        return sortDir === 'asc' ? av - bv : bv - av;
+      }
+      if (sortKey === 'reachability_score') {
+        const av = a.reachability_score || 0;
+        const bv = b.reachability_score || 0;
         return sortDir === 'asc' ? av - bv : bv - av;
       }
       const av = (a[sortKey] ?? '') as string;
@@ -680,8 +714,16 @@ export default function LeadFinderClient({
     ? Math.round(leads.reduce((sum, current) => sum + (current.lead_score || 0), 0) / totalLeadsCount)
     : 0;
 
-  const leadsA = leads.filter(l => l.lead_grade === 'A').length;
-  const leadsNoContact = leads.filter(l => !l.phone && !l.website && !l.email).length;
+  const averageContactScore = totalLeadsCount > 0
+    ? Math.round(leads.reduce((sum, current) => sum + (current.contact_score || 0), 0) / totalLeadsCount)
+    : 0;
+
+  const leadsNoChannels = leads.filter(l => (l.contact_score || 0) === 0).length;
+
+  const top10Accessible = [...leads]
+    .filter(l => (l.reachability_score ?? 0) > 0)
+    .sort((a, b) => (b.reachability_score ?? 0) - (a.reachability_score ?? 0))
+    .slice(0, 10);
 
   // Pagination calculations
   const itemsPerPage = 10;
@@ -1138,39 +1180,67 @@ export default function LeadFinderClient({
             </span>
           </div>
 
-          {/* Card 2: Score Médio */}
+          {/* Card 2: Score Médio de Contato */}
           <div className="bg-white p-4 rounded-2xl border border-[#D8E0EA] shadow-xs flex flex-col justify-between h-24">
-            <span className="text-[10px] font-bold text-[#475569]/80 uppercase tracking-wider block">Score Médio</span>
+            <span className="text-[10px] font-bold text-[#475569]/80 uppercase tracking-wider block">Score Médio de Contato</span>
             <div className="text-lg font-extrabold text-[#002B6A] flex items-center gap-1.5">
-              {averageScore}
+              {averageContactScore}
               <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                averageScore >= 90 ? 'text-emerald-700 bg-emerald-50 border border-emerald-100' :
-                averageScore >= 70 ? 'text-blue-700 bg-blue-50 border border-blue-100' :
-                averageScore >= 50 ? 'text-amber-700 bg-amber-50 border border-amber-100' :
+                averageContactScore >= 70 ? 'text-emerald-700 bg-emerald-50 border border-emerald-100' :
+                averageContactScore >= 40 ? 'text-blue-700 bg-blue-50 border border-blue-100' :
                 'text-rose-700 bg-rose-50 border border-rose-100'
               }`}>
-                {averageScore >= 90 ? 'A' : averageScore >= 70 ? 'B' : averageScore >= 50 ? 'C' : 'D'}
+                {averageContactScore >= 70 ? 'Fácil' : averageContactScore >= 40 ? 'Médio' : 'Difícil'}
               </span>
             </div>
-            <span className="text-[10px] text-[#475569]/70 block">Média geral dos {totalLeadsCount} leads</span>
+            <span className="text-[10px] text-[#475569]/70 block">Média de canais de contato</span>
           </div>
 
-          {/* Card 3: Leads A */}
+          {/* Card 3: Leads Sem Canais */}
           <div className="bg-white p-4 rounded-2xl border border-[#D8E0EA] shadow-xs flex flex-col justify-between h-24">
-            <span className="text-[10px] font-bold text-[#475569]/80 uppercase tracking-wider block">Leads Classe A</span>
-            <div className="text-lg font-extrabold text-[#002B6A]">
-              {leadsA} <span className="text-xs text-[#475569] font-normal">/ {totalLeadsCount}</span>
+            <span className="text-[10px] font-bold text-[#475569]/80 uppercase tracking-wider block">Leads Sem Canais</span>
+            <div className="text-lg font-extrabold text-rose-600">
+              {leadsNoChannels} <span className="text-xs text-[#475569] font-normal">/ {totalLeadsCount}</span>
             </div>
-            <span className="text-[10px] text-[#475569]/70 block">Leads com nota máxima (90+)</span>
+            <span className="text-[10px] text-[#475569]/70 block">Sem nenhum canal público localizado</span>
           </div>
 
-          {/* Card 4: Leads Sem Contato */}
-          <div className="bg-white p-4 rounded-2xl border border-[#D8E0EA] shadow-xs flex flex-col justify-between h-24">
-            <span className="text-[10px] font-bold text-[#475569]/80 uppercase tracking-wider block">Leads Sem Contato</span>
-            <div className="text-lg font-extrabold text-[#002B6A]">
-              {leadsNoContact} <span className="text-xs text-[#475569] font-normal">/ {totalLeadsCount}</span>
+          {/* Card 4: Top 10 Acessíveis Popover */}
+          <div className="bg-white p-4 rounded-2xl border border-[#D8E0EA] shadow-xs flex flex-col justify-between h-24 relative group">
+            <span className="text-[10px] font-bold text-[#475569]/80 uppercase tracking-wider block">Top Leads Acessíveis</span>
+            <div className="text-lg font-extrabold text-[#002B6A] flex items-center justify-between">
+              <span>
+                {leads.filter(l => (l.reachability_score ?? 0) >= 80).length}{' '}
+                <span className="text-xs text-[#475569] font-normal">Muito acessíveis</span>
+              </span>
+              <span className="text-[10px] font-bold text-[#2D6BFF] bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-full cursor-pointer hover:bg-blue-100 transition-all select-none">
+                Ver Top 10
+              </span>
             </div>
-            <span className="text-[10px] text-[#475569]/70 block">Sem telefone, website ou e-mail</span>
+            <span className="text-[10px] text-[#475569]/70 block">Passe o mouse para ver a lista</span>
+
+            {/* Hover Tooltip listing the top 10 */}
+            <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-64 bg-white border border-[#D8E0EA] rounded-xl shadow-xl p-3.5 z-30 hidden group-hover:block transition-all">
+              <h4 className="text-[10px] font-bold text-[#002B6A] border-b border-[#D8E0EA] pb-1.5 mb-2 uppercase tracking-wide">
+                Top 10 Leads Mais Acessíveis
+              </h4>
+              <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                {top10Accessible.length === 0 ? (
+                  <p className="text-[10px] text-slate-400 italic">Nenhum canal de contato ainda.</p>
+                ) : (
+                  top10Accessible.map((l, idx) => (
+                    <div key={l.id} className="flex justify-between items-center text-[10px] font-medium border-b border-slate-50 pb-1">
+                      <span className="text-[#061A40] truncate max-w-[150px]">
+                        {idx + 1}. {l.name}
+                      </span>
+                      <span className="text-emerald-700 bg-emerald-50 px-1.5 py-0.25 rounded-md font-bold">
+                        {l.reachability_score}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -1245,8 +1315,22 @@ export default function LeadFinderClient({
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Buscar na listagem de leads..."
-              className="w-full max-w-sm px-3 py-1.5 rounded-lg border border-[#D8E0EA] bg-[#F7FAFF] text-sm text-[#061A40] placeholder-[#475569]/50 focus:outline-none focus:border-[#2D6BFF] transition-all"
+              className="w-full max-w-xs px-3 py-1.5 rounded-lg border border-[#D8E0EA] bg-[#F7FAFF] text-sm text-[#061A40] placeholder-[#475569]/50 focus:outline-none focus:border-[#2D6BFF] transition-all"
             />
+
+            {/* Advanced Filters Trigger Button */}
+            <button
+              type="button"
+              onClick={() => setIsFiltersOpen(!isFiltersOpen)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-bold transition-all cursor-pointer ${
+                isFiltersOpen
+                  ? 'border-[#2D6BFF] bg-[#2D6BFF] text-white'
+                  : 'border-[#D8E0EA] bg-white text-[#002B6A] hover:bg-[#F7FAFF]'
+              }`}
+            >
+              Filtros Avançados
+              <ChevronDown className={`h-3 w-3 transition-transform ${isFiltersOpen ? 'rotate-180' : ''}`} />
+            </button>
 
             {/* Contact Quality / Status Filter */}
             <select
@@ -1270,12 +1354,80 @@ export default function LeadFinderClient({
           )}
         </div>
 
+        {/* Advanced Filters Panel */}
+        {isFiltersOpen && (
+          <div className="bg-slate-50/50 border-b border-[#D8E0EA] p-4 flex flex-wrap gap-6 items-center">
+            {/* Checkboxes */}
+            <div className="flex items-center gap-4">
+              <label className="flex items-center gap-1.5 text-xs font-semibold text-[#002B6A] cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={filterPhone}
+                  onChange={(e) => setFilterPhone(e.target.checked)}
+                  className="h-4 w-4 rounded border-[#D8E0EA] text-[#2D6BFF] focus:ring-[#2D6BFF]"
+                />
+                Com Telefone
+              </label>
+              <label className="flex items-center gap-1.5 text-xs font-semibold text-[#002B6A] cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={filterWebsite}
+                  onChange={(e) => setFilterWebsite(e.target.checked)}
+                  className="h-4 w-4 rounded border-[#D8E0EA] text-[#2D6BFF] focus:ring-[#2D6BFF]"
+                />
+                Com Website
+              </label>
+              <label className="flex items-center gap-1.5 text-xs font-semibold text-[#002B6A] cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={filterForm}
+                  onChange={(e) => setFilterForm(e.target.checked)}
+                  className="h-4 w-4 rounded border-[#D8E0EA] text-[#2D6BFF] focus:ring-[#2D6BFF]"
+                />
+                Com Formulário
+              </label>
+            </div>
+
+            {/* Selects */}
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-[#475569]">Reachability mínima:</span>
+                <select
+                  value={minReachability}
+                  onChange={(e) => setMinReachability(Number(e.target.value))}
+                  className="px-2.5 py-1 text-xs rounded-lg border border-[#D8E0EA] bg-white text-[#061A40] focus:outline-none focus:border-[#2D6BFF] transition-all cursor-pointer font-semibold"
+                >
+                  <option value={0}>Qualquer</option>
+                  <option value={30}>Média (30+)</option>
+                  <option value={60}>Boa (60+)</option>
+                  <option value={80}>Muito acessível (80+)</option>
+                </select>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-[#475569]">Contact Score mínimo:</span>
+                <select
+                  value={minContactScore}
+                  onChange={(e) => setMinContactScore(Number(e.target.value))}
+                  className="px-2.5 py-1 text-xs rounded-lg border border-[#D8E0EA] bg-white text-[#061A40] focus:outline-none focus:border-[#2D6BFF] transition-all cursor-pointer font-semibold"
+                >
+                  <option value={0}>Qualquer</option>
+                  <option value={30}>30+</option>
+                  <option value={50}>50+</option>
+                  <option value={70}>70+</option>
+                  <option value={90}>90+</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Table Container */}
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left">
             <thead className="bg-[#F7FAFF] border-b border-[#D8E0EA]">
               <tr>
-                <th className="px-4 py-3 text-left w-10">
+                 <th className="px-4 py-3 text-left w-10">
                   <input
                     type="checkbox"
                     checked={filtered.length > 0 && filtered.every((c) => selectedIds.has(c.id))}
@@ -1288,15 +1440,16 @@ export default function LeadFinderClient({
                 <th className="px-4 py-3"><ThBtn col="phone" label="Telefone" /></th>
                 <th className="px-4 py-3"><ThBtn col="website" label="Website" /></th>
                 <th className="px-4 py-3"><ThBtn col="address" label="Endereço" /></th>
-                <th className="px-4 py-3 text-xs font-semibold text-[#475569] uppercase tracking-wide">Busca Relacionada</th>
-                <th className="px-4 py-3"><ThBtn col="lead_score" label="Score" /></th>
+                <th className="px-4 py-3 text-xs font-semibold text-[#475569] uppercase tracking-wide">Contato</th>
+                <th className="px-4 py-3"><ThBtn col="reachability_score" label="Reachability" /></th>
+                <th className="px-4 py-3"><ThBtn col="lead_score" label="Profile Score" /></th>
                 <th className="px-4 py-3"><ThBtn col="created_at" label="Capturado em" /></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#D8E0EA]">
               {paginatedLeads.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-12 text-center text-[#475569]">
+                  <td colSpan={9} className="px-4 py-12 text-center text-[#475569]">
                     Nenhum lead capturado ou correspondente à busca.
                   </td>
                 </tr>
@@ -1364,19 +1517,90 @@ export default function LeadFinderClient({
                       )}
                     </td>
 
-                    {/* Badge niches */}
-                    <td className="px-4 py-3">
-                      <div className="flex flex-wrap gap-1">
-                        <span className="px-2 py-0.5 bg-[#EAF2FF] text-[#002B6A] text-[10px] font-semibold rounded-full">
-                          {lead.category}
-                        </span>
-                        <span className="px-2 py-0.5 bg-slate-100 text-slate-700 text-[10px] font-semibold rounded-full">
-                          {lead.region}
-                        </span>
+                    {/* Contato (Active Channels with Icons) */}
+                    <td className="px-4 py-3 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center gap-2 text-slate-300">
+                        {lead.phone && (
+                          <span title={`Telefone: ${lead.phone}`} className="cursor-help hover:text-[#2D6BFF] transition-colors text-slate-400">
+                            <Phone className="h-4 w-4" />
+                          </span>
+                        )}
+                        {lead.website && (
+                          <span title={`Website: ${lead.website}`} className="cursor-help hover:text-[#2D6BFF] transition-colors text-slate-400">
+                            <Globe className="h-4 w-4" />
+                          </span>
+                        )}
+                        {lead.contact_channels?.instagram && (
+                          <span title={`Instagram: ${lead.contact_channels.instagram}`} className="cursor-help hover:text-[#E1306C] transition-colors text-slate-400">
+                            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
+                              <circle cx="12" cy="12" r="4" />
+                              <circle cx="17.5" cy="6.5" r="0.5" fill="currentColor" />
+                            </svg>
+                          </span>
+                        )}
+                        {lead.contact_channels?.facebook && (
+                          <span title={`Facebook: ${lead.contact_channels.facebook}`} className="cursor-help hover:text-[#1877F2] transition-colors text-slate-400">
+                            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
+                              <path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" />
+                            </svg>
+                          </span>
+                        )}
+                        {lead.contact_channels?.whatsapp && (
+                          <span title={`WhatsApp: ${lead.contact_channels.whatsapp}`} className="cursor-help hover:text-[#25D366] transition-colors text-slate-400">
+                            <MessageCircle className="h-4 w-4" />
+                          </span>
+                        )}
+                        {lead.email && (
+                          <span title={`E-mail: ${lead.email}`} className="cursor-help hover:text-[#2D6BFF] transition-colors text-slate-400">
+                            <Mail className="h-4 w-4" />
+                          </span>
+                        )}
+                        {lead.contact_channels?.contact_form && (
+                          <span title="Formulário de Contato Disponível" className="cursor-help hover:text-amber-500 transition-colors text-slate-400">
+                            <FileText className="h-4 w-4" />
+                          </span>
+                        )}
+                        {!lead.phone && !lead.website && !lead.contact_channels?.instagram && !lead.contact_channels?.facebook && !lead.contact_channels?.whatsapp && !lead.email && !lead.contact_channels?.contact_form && (
+                          <span className="text-slate-300 italic text-[11px]">—</span>
+                        )}
                       </div>
                     </td>
 
-                    {/* Score (Quality Grade and Score) */}
+                    {/* Reachability */}
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      {lead.contact_status === 'pending' ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[10px] font-semibold animate-pulse">
+                          ⏳ Enriquecendo...
+                        </span>
+                      ) : lead.contact_status === 'failed' ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-50 border border-rose-100 text-rose-600 text-[10px] font-semibold">
+                          ❌ Falhou
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-1.5 font-bold text-xs">
+                          <span className={`h-2.5 w-2.5 rounded-full ${
+                            (lead.reachability_score ?? 0) >= 80 ? 'bg-emerald-500' :
+                            (lead.reachability_score ?? 0) >= 60 ? 'bg-blue-500' :
+                            (lead.reachability_score ?? 0) >= 30 ? 'bg-amber-500' :
+                            'bg-rose-500'
+                          }`} />
+                          <span className={`${
+                            (lead.reachability_score ?? 0) >= 80 ? 'text-emerald-700' :
+                            (lead.reachability_score ?? 0) >= 60 ? 'text-blue-700' :
+                            (lead.reachability_score ?? 0) >= 30 ? 'text-amber-700' :
+                            'text-rose-700'
+                          }`}>
+                            {(lead.reachability_score ?? 0) >= 80 ? 'Muito acessível' :
+                             (lead.reachability_score ?? 0) >= 60 ? 'Boa acessibilidade' :
+                             (lead.reachability_score ?? 0) >= 30 ? 'Média' :
+                             'Difícil contato'} ({(lead.reachability_score ?? 0)})
+                          </span>
+                        </span>
+                      )}
+                    </td>
+
+                    {/* Profile Score */}
                     <td className="px-4 py-3 whitespace-nowrap">
                       <div className="flex flex-col gap-0.5">
                         <span className="flex items-center gap-1.5 font-bold text-xs">
@@ -1395,12 +1619,6 @@ export default function LeadFinderClient({
                             {lead.lead_grade || 'D'} — {lead.lead_score || 0}
                           </span>
                         </span>
-                        {lead.contact_status === 'pending' && (
-                          <span className="text-[9px] text-slate-400 italic">⏳ Enriquecendo...</span>
-                        )}
-                        {lead.contact_status === 'failed' && (
-                          <span className="text-[9px] text-rose-400 italic">❌ Falhou</span>
-                        )}
                       </div>
                     </td>
 
