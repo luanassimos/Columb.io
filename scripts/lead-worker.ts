@@ -306,118 +306,172 @@ async function runScraper(
       }
 
       // 2. Extract Website
-      let website: string | null = null;
-      try {
-        const webLink = container.locator('a[aria-label*="Website"], a[aria-label*="website"], a[data-value="Website"], a[href^="http"]:not([href*="google.com"])').first();
-        if (await webLink.count() > 0) {
-          website = await webLink.getAttribute('href');
-        }
-      } catch (e) {
-        // ignore
-      }
-
-      // 3. Extract address, phone, and category by parsing card inner texts on Node-side
       let phone: string | null = null;
+      let website: string | null = null;
       let address: string | null = null;
       let parsedCategory: string | null = null;
 
+      // 1. Try to click the card to load detail panel on the right side
       try {
-        const lines: string[] = [];
-        
-        // Add structured text lines from class W4Efsd first
-        const detailLocators = container.locator('.W4Efsd');
-        const detailCount = await detailLocators.count();
-        for (let j = 0; j < detailCount; j++) {
-          const txt = await detailLocators.nth(j).innerText().catch(() => '');
-          if (txt.trim()) lines.push(txt.trim());
+        await card.scrollIntoViewIfNeeded();
+        await page.waitForTimeout(200);
+        await card.click({ force: true });
+        // Dynamically wait for detail panel to appear (title heading or address button)
+        await page.waitForSelector('h1.DUwDvf, button[data-item-id="address"]', { timeout: 4000 }).catch(() => {});
+      } catch (clickErr) {
+        console.warn(`[Scraper] Erro ao clicar no card ${i + 1}:`, clickErr);
+      }
+
+      // 2. Try to extract phone, website, and address from the right-side detail panel using multiple selectors
+      try {
+        const phoneButton = page.locator('button[data-item-id^="phone:tel:"], [data-tooltip="Copiar número de telefone"], button[aria-label^="Telefone:"]');
+        if (await phoneButton.count() > 0) {
+          const rawPhone = await phoneButton.first().getAttribute('data-item-id') || await phoneButton.first().getAttribute('aria-label');
+          if (rawPhone) {
+            phone = rawPhone.replace('phone:tel:', '').replace('Telefone: ', '').trim();
+          } else {
+            const textPhone = await phoneButton.first().innerText();
+            if (textPhone) phone = textPhone.trim();
+          }
         }
-        
-        // Add all text content from container as fallback lines
-        const cardText = await container.innerText().catch(() => '');
-        cardText.split('\n').forEach(l => {
-          const trimmed = l.trim();
-          if (trimmed && !lines.includes(trimmed)) {
-            lines.push(trimmed);
+
+        const webLink = page.locator('a[data-item-id="authority"], a[aria-label^="Website:"]');
+        if (await webLink.count() > 0) {
+          const hrefAttr = await webLink.first().getAttribute('href');
+          if (hrefAttr) {
+            website = hrefAttr;
           }
-        });
+        }
 
-        const isPhone = (str: string) => {
-          const clean = str.replace(/[^0-9+]/g, '');
-          if (clean.length >= 8 && clean.length <= 15) {
-            if (str.includes('(') && !str.includes(')')) return false; // partial rating
-            const letters = str.replace(/[^a-zA-Z]/g, '').length;
-            if (letters < 3) return true;
+        const addressButton = page.locator('button[data-item-id="address"], button[aria-label^="Endereço:"]');
+        if (await addressButton.count() > 0) {
+          const addressTxt = await addressButton.first().innerText();
+          if (addressTxt && addressTxt.trim()) {
+            address = addressTxt.trim();
           }
-          return false;
-        };
+        }
+      } catch (panelErr) {
+        console.warn('[Scraper] Erro ao extrair dados do painel de detalhes:', panelErr);
+      }
 
-        const isRating = (str: string) => {
-          return /^[345][.,]\d\s*\(\d+\)$/.test(str) || /^[345][.,]\d$/.test(str) || (str.includes('(') && str.includes(')'));
-        };
+      // 3. Fallback: Parse card container text lines if any detail is still missing
+      if (!website || !phone || !address) {
+        try {
+          if (!website) {
+            const webLinkCard = container.locator('a[aria-label*="Website"], a[aria-label*="website"], a[data-value="Website"], a[href^="http"]:not([href*="google.com"])').first();
+            if (await webLinkCard.count() > 0) {
+              website = await webLinkCard.getAttribute('href');
+            }
+          }
 
-        const isAddress = (str: string) => {
-          const keywords = ['av', 'rua', 'r.', 'alameda', 'al.', 'rodovia', 'rod.', 'estrada', 'estr.', 'travessa', 'trv.', 'praça', 'prc.', 'avenida', 'bloco', 'nº', 'sala', 'andar', 'centro', 'bairro', 'cep', 'rj', 'sp', 'mg', 'rs', 'sc', 'pr', 'ba', 'pe', 'ce', 'df', 'go'];
-          const lower = str.toLowerCase();
-          const hasKeyword = keywords.some(k => lower.includes(k) || lower.split(/\s+/).includes(k));
-          const hasComma = str.includes(',');
-          return (hasKeyword || hasComma) && str.length > 8 && !isPhone(str) && !isRating(str);
-        };
+          const lines: string[] = [];
+          
+          // Add structured text lines from class W4Efsd first
+          const detailLocators = container.locator('.W4Efsd');
+          const detailCount = await detailLocators.count();
+          for (let j = 0; j < detailCount; j++) {
+            const txt = await detailLocators.nth(j).innerText().catch(() => '');
+            if (txt.trim()) lines.push(txt.trim());
+          }
+          
+          // Add all text content from container as fallback lines
+          const cardText = await container.innerText().catch(() => '');
+          cardText.split('\n').forEach(l => {
+            const trimmed = l.trim();
+            if (trimmed && !lines.includes(trimmed)) {
+              lines.push(trimmed);
+            }
+          });
 
-        const isCategory = (str: string) => {
-          if (str.length > 40) return false;
-          if (/\d/.test(str)) return false;
-          const lowercase = str.toLowerCase();
-          const excludes = ['aberto', 'fechado', 'fecha às', 'abre às', 'fechado temporariamente', 'atendimento', 'online', 'no local', 'website', 'direções', 'salvar', 'ligar', 'compartilhar', 'delivery', 'retirada'];
-          if (excludes.some(e => lowercase.includes(e))) return false;
-          return true;
-        };
-
-        const uniqueLines = lines.filter(line => line !== name);
-
-        for (const line of uniqueLines) {
-          if (line.includes('·')) {
-            const parts = line.split('·').map(p => p.trim());
-            for (const part of parts) {
-              if (isPhone(part)) {
-                phone = part;
-              } else if (isRating(part)) {
-                // ignore
-              } else if (isAddress(part)) {
-                address = part;
-              } else if (isCategory(part)) {
-                parsedCategory = part;
+          const extractPhone = (str: string): string | null => {
+            const phoneRegex = /(?:\+?[\d\s-()]{8,18})/g;
+            const matches = str.match(phoneRegex);
+            if (matches) {
+              for (const match of matches) {
+                const clean = match.replace(/\D/g, '');
+                if (clean.length >= 8 && clean.length <= 15) {
+                  if (/^\d{5}-\d{3}$/.test(match.trim())) {
+                    continue; // Skip postal codes
+                  }
+                  return match.trim();
+                }
               }
             }
-          } else {
-            if (isPhone(line)) {
-              phone = line;
-            } else if (isAddress(line)) {
-              address = line;
-            } else if (isCategory(line)) {
-              parsedCategory = line;
-            }
-          }
-        }
+            return null;
+          };
 
-        // Fallback for address: select first line that is long enough and not phone, rating, category, or generic button text
-        if (!address) {
+          const isRating = (str: string) => {
+            return /^[345][.,]\d\s*\(\d+\)$/.test(str) || /^[345][.,]\d$/.test(str) || (str.includes('(') && str.includes(')'));
+          };
+
+          const isAddress = (str: string) => {
+            const keywords = ['av', 'rua', 'r.', 'alameda', 'al.', 'rodovia', 'rod.', 'estrada', 'estr.', 'travessa', 'trv.', 'praça', 'prc.', 'avenida', 'bloco', 'nº', 'sala', 'andar', 'centro', 'bairro', 'cep', 'rj', 'sp', 'mg', 'rs', 'sc', 'pr', 'ba', 'pe', 'ce', 'df', 'go'];
+            const lower = str.toLowerCase();
+            const hasKeyword = keywords.some(k => lower.includes(k) || lower.split(/\s+/).includes(k));
+            const hasComma = str.includes(',');
+            return (hasKeyword || hasComma) && str.length > 8 && !extractPhone(str) && !isRating(str);
+          };
+
+          const isCategory = (str: string) => {
+            if (str.length > 40) return false;
+            if (/\d/.test(str)) return false;
+            const lowercase = str.toLowerCase();
+            const excludes = ['aberto', 'fechado', 'fecha às', 'abre às', 'fechado temporariamente', 'atendimento', 'online', 'no local', 'website', 'direções', 'salvar', 'ligar', 'compartilhar', 'delivery', 'retirada'];
+            if (excludes.some(e => lowercase.includes(e))) return false;
+            return true;
+          };
+
+          const uniqueLines = lines.filter(line => line !== name);
+
           for (const line of uniqueLines) {
-            const lower = line.toLowerCase();
-            const excludes = ['aberto', 'fechado', 'fecha às', 'abre às', 'estrelas', 'avaliações', 'website', 'direções', 'salvar', 'ligar', 'compartilhar', 'delivery', 'retirada', 'online', 'no local'];
-            if (
-              line.length > 8 &&
-              !isPhone(line) &&
-              !isRating(line) &&
-              !isCategory(line) &&
-              !excludes.some(e => lower.includes(e))
-            ) {
-              address = line;
-              break;
+            const foundPhone = extractPhone(line);
+            if (foundPhone && !phone) {
+              phone = foundPhone;
+            }
+
+            if (line.includes('·')) {
+              const parts = line.split('·').map(p => p.trim());
+              for (const part of parts) {
+                const partPhone = extractPhone(part);
+                if (partPhone && !phone) {
+                  phone = partPhone;
+                } else if (isRating(part)) {
+                  // ignore
+                } else if (isAddress(part) && !address) {
+                  address = part;
+                } else if (isCategory(part) && !parsedCategory) {
+                  parsedCategory = part;
+                }
+              }
+            } else {
+              if (isAddress(line) && !address) {
+                address = line;
+              } else if (isCategory(line) && !parsedCategory) {
+                parsedCategory = line;
+              }
             }
           }
+
+          // Fallback for address
+          if (!address) {
+            for (const line of uniqueLines) {
+              const lower = line.toLowerCase();
+              const excludes = ['aberto', 'fechado', 'fecha às', 'abre às', 'estrelas', 'avaliações', 'website', 'direções', 'salvar', 'ligar', 'compartilhar', 'delivery', 'retirada', 'online', 'no local'];
+              if (
+                line.length > 8 &&
+                !extractPhone(line) &&
+                !isRating(line) &&
+                !isCategory(line) &&
+                !excludes.some(e => lower.includes(e))
+              ) {
+                address = line;
+                break;
+              }
+            }
+          }
+        } catch (e) {
+          // ignore
         }
-      } catch (e) {
-        // ignore
       }
 
       // 4. Fallback search for address if not found
