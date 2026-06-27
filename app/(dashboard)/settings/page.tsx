@@ -103,12 +103,6 @@ export default async function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-extrabold tracking-tight text-[#002B6A]">Settings</h1>
-        <p className="text-sm text-[#475569] mt-1">
-          Configure active workspace settings, SMTP email outbound profiles, and manage account security.
-        </p>
-      </div>
 
       <SettingsClient
         activeWorkspace={activeWorkspace}

@@ -620,40 +620,27 @@ export default function LeadFinderClient({
         }
       `}</style>
 
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-[#002B6A] flex items-center gap-2">
-            <Target className="h-8 w-8 text-[#2D6BFF]" />
-            Captar Leads
-          </h1>
-          <p className="text-sm text-[#475569] mt-1">
-            Capte contatos empresariais de forma automatizada por categoria de serviço e região geográfica.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => setShowTerminalInfo(prev => !prev)}
-          className={`p-2 rounded-xl border transition-all cursor-pointer shrink-0 ${
-            showTerminalInfo
-              ? 'bg-[#EAF2FF] border-[#2D6BFF] text-[#2D6BFF] shadow-sm'
-              : 'bg-white border-[#D8E0EA] text-[#475569] hover:bg-slate-50'
-          }`}
-          title="Executar Worker Local"
-        >
-          <Info className="h-5 w-5" />
-        </button>
-      </div>
-      
       {/* Stages Panel (Form, Status, or Result) */}
       <div className="transition-all duration-300">
         {currentStage === 'form' && (
           <div className="bg-white rounded-2xl border border-[#D8E0EA] p-6 shadow-sm w-full">
-            <h3 className="text-lg font-bold text-[#002B6A] mb-4 flex items-center justify-between">
+            <h3 className="text-base font-bold text-[#002B6A] mb-4 flex items-center justify-between">
               <span className="flex items-center gap-2">
                 <Search className="h-4.5 w-4.5 text-[#2D6BFF]" />
                 Iniciar Nova Captura
               </span>
+              <button
+                type="button"
+                onClick={() => setShowTerminalInfo(prev => !prev)}
+                className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
+                  showTerminalInfo
+                    ? 'bg-[#EAF2FF] border-[#2D6BFF] text-[#2D6BFF] shadow-sm'
+                    : 'bg-white border-[#D8E0EA] text-[#475569] hover:bg-slate-50'
+                }`}
+                title="Executar Worker Local"
+              >
+                <Info className="h-4 w-4" />
+              </button>
             </h3>
 
             <form onSubmit={handleStartCapture} className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1210,24 +1197,50 @@ export default function LeadFinderClient({
         </div>
       </div>
 
-      {/* Dev Terminal Instruction Card (Glassmorphic Terminal Style) */}
+      {/* Dev Terminal Instruction Modal */}
       {showTerminalInfo && (
-        <div className="bg-[#061A40] text-blue-100 rounded-2xl p-6 shadow-xl relative overflow-hidden border border-blue-900 mt-6 animate-fade-in">
-          <div className="absolute right-0 top-0 translate-x-1/3 -translate-y-1/3 w-40 h-40 bg-blue-500/10 rounded-full blur-2xl pointer-events-none" />
-          
-          <h3 className="text-sm font-bold text-white mb-2.5 flex items-center gap-2">
-            <Terminal className="h-4 w-4 text-[#2D6BFF]" />
-            Executar Worker Local (Scraper)
-          </h3>
-          
-          <p className="text-xs text-blue-200/80 mb-4 leading-relaxed">
-            O scraping utiliza o navegador local para não sobrecarregar as serverless functions.
-            Certifique-se de que o worker local está rodando em sua máquina para processar a busca:
-          </p>
+        <div className="fixed inset-0 bg-[#061A40]/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div 
+            className="fixed inset-0" 
+            onClick={() => setShowTerminalInfo(false)} 
+          />
+          <div className="bg-[#061A40] text-blue-100 w-full max-w-md rounded-2xl border border-blue-900 shadow-2xl overflow-hidden relative p-6 space-y-4 z-10 animate-fade-in">
+            <div className="absolute right-0 top-0 translate-x-1/3 -translate-y-1/3 w-40 h-40 bg-blue-500/10 rounded-full blur-2xl pointer-events-none" />
+            
+            <div className="flex justify-between items-center relative z-10">
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <Terminal className="h-4 w-4 text-[#2D6BFF]" />
+                Executar Worker Local (Scraper)
+              </h3>
+              <button 
+                type="button"
+                onClick={() => setShowTerminalInfo(false)}
+                className="p-1 rounded-md text-blue-200 hover:bg-blue-950 transition-colors cursor-pointer"
+                title="Fechar"
+              >
+                <X className="h-4.5 w-4.5" />
+              </button>
+            </div>
+            
+            <p className="text-xs text-blue-200/80 leading-relaxed relative z-10">
+              O scraping utiliza o navegador local para não sobrecarregar as serverless functions.
+              Certifique-se de que o worker local está rodando em sua máquina para processar a busca:
+            </p>
 
-          <div className="bg-black/45 rounded-lg p-3 border border-blue-950 font-mono text-xs text-emerald-400 select-all flex items-center justify-between">
-            <span>npm run worker:leads</span>
-            <span className="text-[10px] text-[#475569] select-none">Comando Terminal</span>
+            <div className="bg-black/45 rounded-lg p-3 border border-blue-950 font-mono text-xs text-emerald-400 select-all flex items-center justify-between relative z-10">
+              <span>npm run worker:leads</span>
+              <span className="text-[10px] text-slate-500 select-none">Comando Terminal</span>
+            </div>
+
+            <div className="pt-2 flex justify-end relative z-10">
+              <button
+                type="button"
+                onClick={() => setShowTerminalInfo(false)}
+                className="px-4 py-2 bg-blue-950 text-white hover:bg-blue-900 border border-blue-800 text-xs font-bold rounded-lg transition-all cursor-pointer"
+              >
+                Entendido
+              </button>
+            </div>
           </div>
         </div>
       )}
