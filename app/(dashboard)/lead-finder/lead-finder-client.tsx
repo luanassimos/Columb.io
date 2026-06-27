@@ -117,7 +117,7 @@ export default function LeadFinderClient({
   const [scoreFilter, setScoreFilter] = useState<'all' | 'only_a' | 'only_b_plus' | 'score_70' | 'score_50' | 'pending'>('all');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-
+  const [currentPage, setCurrentPage] = useState(1);
   // Advanced Geotargeted states
   const [lat, setLat] = useState(-22.9068); // Default Rio de Janeiro
   const [lng, setLng] = useState(-43.1729);
@@ -353,6 +353,11 @@ export default function LeadFinderClient({
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('created_at');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
+
+  // Reset page when filters or list changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, scoreFilter, leads]);
 
   // Sync latestJob from props initially
   useEffect(() => {
@@ -677,6 +682,13 @@ export default function LeadFinderClient({
 
   const leadsA = leads.filter(l => l.lead_grade === 'A').length;
   const leadsNoContact = leads.filter(l => !l.phone && !l.website && !l.email).length;
+
+  // Pagination calculations
+  const itemsPerPage = 10;
+  const totalPages = Math.ceil(filtered.length / itemsPerPage) || 1;
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedLeads = filtered.slice(startIndex, endIndex);
 
   return (
     <div className="space-y-6">
@@ -1282,14 +1294,14 @@ export default function LeadFinderClient({
               </tr>
             </thead>
             <tbody className="divide-y divide-[#D8E0EA]">
-              {filtered.length === 0 ? (
+              {paginatedLeads.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="px-4 py-12 text-center text-[#475569]">
                     Nenhum lead capturado ou correspondente à busca.
                   </td>
                 </tr>
               ) : (
-                filtered.map((lead) => (
+                paginatedLeads.map((lead) => (
                   <tr
                     key={lead.id}
                     onClick={() => setActiveLead(lead)}
@@ -1406,9 +1418,56 @@ export default function LeadFinderClient({
           </table>
         </div>
 
-        {/* Footer info */}
-        <div className="px-4 py-3 border-t border-[#D8E0EA] text-xs text-[#475569] bg-slate-50/10">
-          Mostrando {filtered.length} de {leads.length} leads capturados
+        {/* Footer info & Pagination */}
+        <div className="px-4 py-3 border-t border-[#D8E0EA] flex items-center justify-between text-xs text-[#475569] bg-slate-50/10">
+          <div>
+            Mostrando <span className="font-semibold text-[#002B6A]">{filtered.length > 0 ? startIndex + 1 : 0}</span> até{' '}
+            <span className="font-semibold text-[#002B6A]">{Math.min(endIndex, filtered.length)}</span> de{' '}
+            <span className="font-semibold text-[#002B6A]">{filtered.length}</span> leads{' '}
+            {filtered.length !== leads.length && `(filtrados de ${leads.length} no total)`}
+          </div>
+
+          {totalPages > 1 && (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={currentPage === 1}
+                onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
+                className="px-2.5 py-1.5 rounded-lg border border-[#D8E0EA] bg-white text-[#002B6A] font-semibold hover:bg-[#F7FAFF] disabled:opacity-40 disabled:hover:bg-white transition-all cursor-pointer disabled:cursor-not-allowed"
+              >
+                Anterior
+              </button>
+              
+              <div className="flex items-center gap-1">
+                {Array.from({ length: totalPages }, (_, idx) => {
+                  const pageNum = idx + 1;
+                  return (
+                    <button
+                      key={pageNum}
+                      type="button"
+                      onClick={() => setCurrentPage(pageNum)}
+                      className={`h-7 w-7 rounded-lg border text-xs font-bold transition-all cursor-pointer ${
+                        currentPage === pageNum
+                          ? 'border-[#2D6BFF] bg-[#2D6BFF] text-white shadow-xs'
+                          : 'border-[#D8E0EA] bg-white text-[#475569] hover:bg-[#F7FAFF] hover:text-[#002B6A]'
+                      }`}
+                    >
+                      {pageNum}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <button
+                type="button"
+                disabled={currentPage === totalPages}
+                onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
+                className="px-2.5 py-1.5 rounded-lg border border-[#D8E0EA] bg-white text-[#002B6A] font-semibold hover:bg-[#F7FAFF] disabled:opacity-40 disabled:hover:bg-white transition-all cursor-pointer disabled:cursor-not-allowed"
+              >
+                Próximo
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

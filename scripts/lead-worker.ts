@@ -234,17 +234,24 @@ async function runScraper(
 
     previousCount = currentCount;
     try {
-      const cards = page.locator('a[href*="/maps/place/"]');
-      const cardsCount = await cards.count();
-      if (cardsCount > 0) {
-        await cards.last().scrollIntoViewIfNeeded();
+      const feed = page.locator('div[role="feed"]');
+      if (await feed.count() > 0) {
+        await feed.first().evaluate((el) => {
+          el.scrollTo(0, el.scrollHeight);
+        });
       } else {
-        await page.keyboard.press('PageDown');
+        const cards = page.locator('a[href*="/maps/place/"]');
+        const cardsCount = await cards.count();
+        if (cardsCount > 0) {
+          await cards.last().scrollIntoViewIfNeeded();
+        } else {
+          await page.keyboard.press('PageDown');
+        }
       }
     } catch (scrollErr) {
       console.warn('[Scraper] Erro ao rolar página:', scrollErr);
     }
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(2000); // 2s wait is much safer for Google Maps network lazy loading
     scrollAttempts++;
   }
 
