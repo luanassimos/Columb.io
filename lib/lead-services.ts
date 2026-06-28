@@ -200,18 +200,63 @@ export async function captureProfessionalLeads(
   limitCount: number,
   onProgress: (count: number, lead: any) => Promise<boolean>
 ): Promise<void> {
-  const searchQuery = `site:linkedin.com/in/ "${role}" ${location ? `"${location}"` : ''} ${keywords ? `"${keywords}"` : ''}`;
+  const checkUrlExists = async (urlStr: string): Promise<boolean> => {
+    try {
+      const res = await fetch(urlStr, {
+        method: 'GET',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.5',
+        },
+        signal: AbortSignal.timeout(4000)
+      });
+      
+      // 1. Direct status code check
+      if (res.status === 404) return false;
+
+      // 2. Redirect URL check (LinkedIn redirects non-existent slugs to directory/login or 404)
+      if (res.url.includes('/404') || res.url.includes('page-not-found') || res.url.includes('notfound')) {
+        return false;
+      }
+
+      // 3. Page content inspection (some systems serve a 200 OK wrapper page displaying an error message)
+      const htmlText = await res.text();
+      const lowerText = htmlText.toLowerCase();
+      if (
+        lowerText.includes('page not found') ||
+        lowerText.includes('perfil não encontrado') ||
+        lowerText.includes('profile-not-found') ||
+        lowerText.includes('cannot be found') ||
+        lowerText.includes('esta página não existe')
+      ) {
+        return false;
+      }
+
+      return true;
+    } catch {
+      // In case of rate limit (like HTTP 999/429/403) or request failure, treat as alive to prevent false-positives
+      return true;
+    }
+  };
+
+  const cleanKeywords = keywords
+    ? keywords.split(',').map(k => k.trim()).filter(Boolean).map(k => `"${k}"`).join(' ')
+    : '';
+  const searchQuery = `site:linkedin.com/in/ "${role}" ${location ? `"${location}"` : ''} ${cleanKeywords}`;
   const url = `https://www.google.com/search?q=${encodeURIComponent(searchQuery)}`;
 
   console.log(`[LeadServices] Starting professional scraper on URL: ${url}`);
-  const browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage();
-  
-  // Set realistic user agent to minimize captchas
-  await page.setExtraHTTPHeaders({
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+  const browser = await chromium.launch({ 
+    headless: true,
+    args: ['--disable-blink-features=AutomationControlled']
   });
+  const context = await browser.newContext({
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    viewport: { width: 1280, height: 720 },
+    locale: 'pt-BR,pt;q=0.9,en-US;q=0.8',
+  });
+  const page = await context.newPage();
 
   let savedCount = 0;
   let parsedLeads: any[] = [];
@@ -222,47 +267,141 @@ export async function captureProfessionalLeads(
 
     // Check if Google blocked us
     const content = await page.content();
-    if (content.includes('did not match any documents') || content.includes('g-recaptcha') || content.includes('captcha')) {
-      console.log('[LeadServices] Google block or no search results detected. Using fallback professional generator.');
-    } else {
-      // Parse search result blocks
+    const isGoogleBlocked = content.includes('did not match any documents') || content.includes('g-recaptcha') || content.includes('captcha') || content.includes('Unusual traffic');
+    
+    if (!isGoogleBlocked) {
+      // Parse Google results
       const resultElements = await page.$$('div.g');
-      for (const element of resultElements) {
+      const jobsToProcess = resultElements.map(async (element) => {
         try {
           const titleEl = await element.$('h3');
           const linkEl = await element.$('a');
-          const snippetEl = await element.$('div[style*="-webkit-line-clamp"], .VwiC3b');
-
           if (titleEl && linkEl) {
             const rawTitle = await titleEl.innerText();
             const profileUrl = await linkEl.getAttribute('href') || '';
-            const snippet = snippetEl ? await snippetEl.innerText() : '';
-
-            // Clean title (e.g. "John Doe - Senior Developer - Company | LinkedIn")
-            const titleParts = rawTitle.split(/[-|]/).map(p => p.trim());
-            const displayName = titleParts[0] || 'Profissional';
-            
-            // Avoid scraping page names like "Profiles"
-            if (displayName.toLowerCase().includes('perfil') || displayName.toLowerCase().includes('profiles')) continue;
-
-            const professionalRole = titleParts[1] || role;
-            const industry = titleParts[2] || role;
 
             if (profileUrl.includes('linkedin.com/in/')) {
-              parsedLeads.push({
-                display_name: displayName,
-                professional_role: professionalRole,
-                industry: industry,
-                location: location || 'Remoto',
-                profile_url: profileUrl,
-                contact_channel: profileUrl,
-              });
+              const titleParts = rawTitle.split(/[-|]/).map(p => p.trim());
+              const displayName = titleParts[0] || 'Profissional';
+              if (displayName.toLowerCase().includes('perfil') || displayName.toLowerCase().includes('profiles')) return null;
+
+              const professionalRole = titleParts[1] || role;
+              const industry = titleParts[2] || role;
+
+              const exists = await checkUrlExists(profileUrl);
+              if (exists) {
+                return {
+                  display_name: displayName,
+                  professional_role: professionalRole,
+                  industry: industry,
+                  location: location || 'Remoto',
+                  profile_url: profileUrl,
+                  contact_channel: profileUrl,
+                };
+              }
             }
           }
-        } catch (err) {
-          // Ignore individual result parsing errors
-        }
-      }
+        } catch {}
+        return null;
+      });
+
+      const processedResults = await Promise.all(jobsToProcess);
+      parsedLeads = processedResults.filter(Boolean) as any[];
+    }
+
+    // Fallback 1: Try Bing Search
+    if (parsedLeads.length === 0) {
+      console.log('[LeadServices] Google search blocked or empty. Trying Bing Search...');
+      const bingUrl = `https://www.bing.com/search?q=${encodeURIComponent(searchQuery)}`;
+      await page.goto(bingUrl, { waitUntil: 'domcontentloaded', timeout: 20000 });
+      await page.waitForTimeout(2000);
+
+      const bingResults = await page.$$('li.b_algo');
+      const jobsToProcess = bingResults.map(async (element) => {
+        try {
+          const linkEl = await element.$('h2 a');
+          if (linkEl) {
+            const profileUrl = await linkEl.getAttribute('href') || '';
+            const rawTitle = await linkEl.innerText();
+
+            if (profileUrl.includes('linkedin.com/in/')) {
+              const titleParts = rawTitle.split(/[-|]/).map(p => p.trim());
+              const displayName = titleParts[0] || 'Profissional';
+              if (displayName.toLowerCase().includes('perfil') || displayName.toLowerCase().includes('profiles')) return null;
+
+              const professionalRole = titleParts[1] || role;
+              const industry = titleParts[2] || role;
+
+              const exists = await checkUrlExists(profileUrl);
+              if (exists) {
+                return {
+                  display_name: displayName,
+                  professional_role: professionalRole,
+                  industry: industry,
+                  location: location || 'Remoto',
+                  profile_url: profileUrl,
+                  contact_channel: profileUrl,
+                };
+              }
+            }
+          }
+        } catch {}
+        return null;
+      });
+
+      const processedResults = await Promise.all(jobsToProcess);
+      parsedLeads = processedResults.filter(Boolean) as any[];
+    }
+
+    // Fallback 2: Try DuckDuckGo Search
+    if (parsedLeads.length === 0) {
+      console.log('[LeadServices] Bing search empty. Trying DuckDuckGo Search...');
+      const ddgUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(searchQuery)}`;
+      await page.goto(ddgUrl, { waitUntil: 'domcontentloaded', timeout: 20000 });
+      await page.waitForTimeout(2000);
+
+      const ddgResults = await page.$$('.result');
+      const jobsToProcess = ddgResults.map(async (element) => {
+        try {
+          const linkEl = await element.$('.result__a');
+          if (linkEl) {
+            let profileUrl = await linkEl.getAttribute('href') || '';
+            const rawTitle = await linkEl.innerText();
+
+            if (profileUrl.includes('uddg=')) {
+              const matches = profileUrl.match(/uddg=([^&]+)/);
+              if (matches) {
+                profileUrl = decodeURIComponent(matches[1]);
+              }
+            }
+
+            if (profileUrl.includes('linkedin.com/in/')) {
+              const titleParts = rawTitle.split(/[-|]/).map(p => p.trim());
+              const displayName = titleParts[0] || 'Profissional';
+              if (displayName.toLowerCase().includes('perfil') || displayName.toLowerCase().includes('profiles')) return null;
+
+              const professionalRole = titleParts[1] || role;
+              const industry = titleParts[2] || role;
+
+              const exists = await checkUrlExists(profileUrl);
+              if (exists) {
+                return {
+                  display_name: displayName,
+                  professional_role: professionalRole,
+                  industry: industry,
+                  location: location || 'Remoto',
+                  profile_url: profileUrl,
+                  contact_channel: profileUrl,
+                };
+              }
+            }
+          }
+        } catch {}
+        return null;
+      });
+
+      const processedResults = await Promise.all(jobsToProcess);
+      parsedLeads = processedResults.filter(Boolean) as any[];
     }
   } catch (err) {
     console.error('[LeadServices] Playwright scraping error:', err);
@@ -287,14 +426,20 @@ export async function captureProfessionalLeads(
         professional_role: `${role.charAt(0).toUpperCase() + role.slice(1)} ${['Senior', 'Pleno', 'Especialista', 'Consultor'][i % 4]}`,
         industry: role.charAt(0).toUpperCase() + role.slice(1),
         location: location || 'Remoto',
-        profile_url: `https://www.linkedin.com/in/${slug}`,
-        contact_channel: `https://www.linkedin.com/in/${slug}`,
+        profile_url: `https://www.linkedin.com/pub/dir?first=${encodeURIComponent(firstName)}&last=${encodeURIComponent(lastName)}`,
+        contact_channel: `https://www.linkedin.com/pub/dir?first=${encodeURIComponent(firstName)}&last=${encodeURIComponent(lastName)}`,
       });
     }
   }
 
   // Process and save leads
   for (const lead of parsedLeads.slice(0, limitCount)) {
+    const exists = await checkUrlExists(lead.profile_url);
+    if (!exists) {
+      console.log(`[LeadServices] Skipping lead as profile URL returned 404: ${lead.profile_url}`);
+      continue;
+    }
+
     const scoreInfo = calculateProfessionalScore(lead);
     const finalLead = {
       ...lead,

@@ -20,9 +20,10 @@ import {
   Globe,
   Download,
   Send,
-  SlidersHorizontal
+  SlidersHorizontal,
+  MapPin
 } from 'lucide-react';
-import { createLeadJob, importLeadsToContacts, deleteLeads, recalculateLeadsScore } from '@/app/actions/lead-finder';
+import { createLeadJob, importLeadsToContacts, deleteLeads } from '@/app/actions/lead-finder';
 import { WorkspaceRole } from '@/lib/permissions';
 
 interface ProfessionalLead {
@@ -47,6 +48,20 @@ interface ProfessionalFinderClientProps {
 
 type SortKey = 'display_name' | 'professional_role' | 'location' | 'professional_score' | 'created_at';
 type SortDir = 'asc' | 'desc';
+
+const SUGGESTED_ROLES_PT = [
+  "Desenvolvedor de Software", "Personal Trainer", "Nutricionista", "Designer Gráfico",
+  "Gerente de Projetos", "Social Media", "Psicólogo", "Fisioterapeuta", "Fotógrafo",
+  "Corretor de Imóveis", "Advogado", "Contador", "Engenheiro Civil", "Arquiteto",
+  "Professor de Inglês", "Consultor de Vendas", "Esteticista", "Copywriter", "Gestor de Tráfego"
+];
+
+const SUGGESTED_ROLES_EN = [
+  "Software Developer", "Personal Trainer", "Nutritionist", "Graphic Designer",
+  "Project Manager", "Social Media Manager", "Psychologist", "Physical Therapist", "Photographer",
+  "Real Estate Agent", "Lawyer", "Accountant", "Civil Engineer", "Architect",
+  "English Teacher", "Sales Consultant", "Esthetician", "Copywriter", "Traffic Manager"
+];
 
 export default function ProfessionalFinderClient({
   initialLatestJob,
@@ -76,9 +91,33 @@ export default function ProfessionalFinderClient({
   const [formError, setFormError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
 
+  const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false);
+  const [language, setLanguage] = useState<'pt' | 'en'>('pt');
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const rolesList = language === 'pt' ? SUGGESTED_ROLES_PT : SUGGESTED_ROLES_EN;
+  const filteredRoles = rolesList.filter((cat) =>
+    cat.toLowerCase().includes(category.toLowerCase())
+  );
+
+  // Advanced Geotargeted states
+  const [lat, setLat] = useState(-22.9068); // Default Rio de Janeiro
+  const [lng, setLng] = useState(-43.1729);
+  const [radius, setRadius] = useState(5000); // 5km in meters
+
+  // Map instances states
+  const [mapInstance, setMapInstance] = useState<any>(null);
+  const [markerInstance, setMarkerInstance] = useState<any>(null);
+  const [circleInstance, setCircleInstance] = useState<any>(null);
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const isMapClickRef = useRef(false);
+
   // Selection states
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isActionsOpen, setIsActionsOpen] = useState(false);
+
+  // Detail Modal state
+  const [activeLead, setActiveLead] = useState<ProfessionalLead | null>(null);
 
   // Filters state
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
@@ -96,6 +135,205 @@ export default function ProfessionalFinderClient({
   const [showFormOverride, setShowFormOverride] = useState(false);
 
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
+
+  const isJobActive = latestJob && (latestJob.status === 'pending' || latestJob.status === 'running');
+  const isJobFinished = latestJob && (latestJob.status === 'completed' || latestJob.status === 'failed' || latestJob.status === 'cancelled');
+
+  let currentStage: 'form' | 'status' | 'result' = 'form';
+  if (isJobActive) {
+    currentStage = 'status';
+  } else if (isJobFinished && !showFormOverride) {
+    currentStage = 'result';
+  }
+
+  // Inject Leaflet CSS dynamically on client mount
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!document.getElementById('leaflet-css')) {
+      const link = document.createElement('link');
+      link.id = 'leaflet-css';
+      link.rel = 'stylesheet';
+      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+      document.head.appendChild(link);
+    }
+  }, []);
+
+  // Initialize and remove map based on currentStage
+  useEffect(() => {
+    if (currentStage !== 'form') return;
+    if (!mapContainerRef.current) return;
+
+    let active = true;
+    let map: any = null;
+    let marker: any = null;
+    let circle: any = null;
+
+    // Load Leaflet dynamically to avoid SSR errors
+    import('leaflet').then((L) => {
+      if (!active) return;
+
+      // Fix default marker icon path issue in Leaflet + NextJS
+      const DefaultIcon = L.Icon.Default.prototype as any;
+      delete DefaultIcon._getIconUrl;
+      L.Icon.Default.mergeOptions({
+        iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+        iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+        shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+      });
+
+      // Create map instance
+      map = L.map(mapContainerRef.current!).setView([lat, lng], 12);
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors',
+      }).addTo(map);
+
+      // Create marker and circle
+      marker = L.marker([lat, lng], { draggable: true }).addTo(map);
+      circle = L.circle([lat, lng], {
+        radius: radius,
+        color: '#2D6BFF',
+        fillColor: '#2D6BFF',
+        fillOpacity: 0.15,
+        weight: 1.5,
+      }).addTo(map);
+
+      const reverseGeocode = async (latitude: number, longitude: number) => {
+        try {
+          const response = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
+          );
+          if (response.ok) {
+            const data = await response.json();
+            if (data && data.address) {
+              const address = data.address;
+              const city = address.city || address.town || address.village || address.municipality;
+              const suburb = address.suburb || address.neighbourhood || address.quarter;
+              const state = address.state;
+              
+              let detectedRegion = '';
+              if (suburb && city) {
+                detectedRegion = `${suburb}, ${city}`;
+              } else if (city) {
+                detectedRegion = state ? `${city}, ${state}` : city;
+              } else if (address.road) {
+                detectedRegion = address.road;
+              } else if (data.display_name) {
+                detectedRegion = data.display_name.split(',').slice(0, 2).join(',').trim();
+              }
+              
+              if (detectedRegion) {
+                isMapClickRef.current = true;
+                setRegion(detectedRegion);
+              }
+            }
+          }
+        } catch (err) {
+          console.error('Erro ao fazer geocodificação reversa:', err);
+        }
+      };
+
+      // Update state on marker drag
+      marker.on('dragend', () => {
+        const position = marker.getLatLng();
+        setLat(position.lat);
+        setLng(position.lng);
+        reverseGeocode(position.lat, position.lng);
+      });
+
+      // Update state and marker/circle on map click
+      map.on('click', (e: any) => {
+        const { lat: clickLat, lng: clickLng } = e.latlng;
+        setLat(clickLat);
+        setLng(clickLng);
+        marker.setLatLng(e.latlng);
+        circle.setLatLng(e.latlng);
+        reverseGeocode(clickLat, clickLng);
+      });
+
+      // Save instances
+      setMapInstance(map);
+      setMarkerInstance(marker);
+      setCircleInstance(circle);
+    });
+
+    return () => {
+      active = false;
+      if (map) {
+        map.remove();
+      }
+      setMapInstance(null);
+      setMarkerInstance(null);
+      setCircleInstance(null);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStage]);
+
+  // Synchronize Leaflet map instances with React states defensively
+  useEffect(() => {
+    if (!mapInstance) return;
+
+    try {
+      if (markerInstance) {
+        const currentPos = markerInstance.getLatLng();
+        if (currentPos.lat !== lat || currentPos.lng !== lng) {
+          markerInstance.setLatLng([lat, lng]);
+        }
+      }
+      if (circleInstance) {
+        const currentPos = circleInstance.getLatLng();
+        if (currentPos.lat !== lat || currentPos.lng !== lng) {
+          circleInstance.setLatLng([lat, lng]);
+        }
+        if (circleInstance.getRadius() !== radius) {
+          circleInstance.setRadius(radius);
+        }
+      }
+      
+      // Smoothly pan map to new coordinates
+      const mapCenter = mapInstance.getCenter();
+      if (mapCenter.lat !== lat || mapCenter.lng !== lng) {
+        mapInstance.panTo([lat, lng]);
+      }
+    } catch (err) {
+      console.warn('Erro ao sincronizar Leaflet:', err);
+    }
+  }, [lat, lng, radius, mapInstance, markerInstance, circleInstance]);
+
+  // Geocode region text to map coordinates
+  useEffect(() => {
+    if (isMapClickRef.current) {
+      isMapClickRef.current = false;
+      return;
+    }
+    if (!region || region.trim().length < 3) return;
+
+    const delayDebounceFn = setTimeout(async () => {
+      try {
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(region.trim())}&limit=1`
+        );
+        if (response.ok) {
+          const data = await response.json();
+          if (data && data.length > 0) {
+            const first = data[0];
+            const newLat = parseFloat(first.lat);
+            const newLng = parseFloat(first.lon);
+            setLat(newLat);
+            setLng(newLng);
+            
+            if (mapInstance) {
+              mapInstance.setView([newLat, newLng], 12);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Erro ao geocodificar região:', err);
+      }
+    }, 1200);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [region, mapInstance]);
 
   // Polling for pending or running jobs
   useEffect(() => {
@@ -159,6 +397,9 @@ export default function ProfessionalFinderClient({
       keywords: keywords.trim() || undefined,
       limitCount,
       leadEntityType: 'professional',
+      lat: lat,
+      lng: lng,
+      radius: radius,
     });
     setIsSubmitting(false);
 
@@ -388,16 +629,6 @@ export default function ProfessionalFinderClient({
   const topOpportunities = leads.filter(l => l.professional_score >= 70).length;
   const activeChannels = leads.filter(l => !!l.contact_channel).length;
 
-  const isJobActive = latestJob && (latestJob.status === 'pending' || latestJob.status === 'running');
-  const isJobFinished = latestJob && (latestJob.status === 'completed' || latestJob.status === 'failed' || latestJob.status === 'cancelled');
-
-  let currentStage: 'form' | 'status' | 'result' = 'form';
-  if (isJobActive) {
-    currentStage = 'status';
-  } else if (isJobFinished && !showFormOverride) {
-    currentStage = 'result';
-  }
-
   return (
     <div className="space-y-6">
       {/* Top Banner / Headline */}
@@ -465,17 +696,72 @@ export default function ProfessionalFinderClient({
               Iniciar Captura de Oportunidades
             </h3>
 
-            <form onSubmit={handleStartCapture} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-[#002B6A]">Área de Atuação ou Cargo</label>
+            <form onSubmit={handleStartCapture} className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Left Column: Form Fields */}
+              <div className="space-y-4">
+                <div className="space-y-1.5 relative" ref={dropdownRef}>
+                  <div className="flex justify-between items-center">
+                    <label className="text-xs font-semibold text-[#002B6A]">Área de Atuação ou Cargo</label>
+                    <div className="flex gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLanguage('pt');
+                          setCategory('');
+                        }}
+                        className={`text-[10px] px-2 py-0.5 rounded-full transition-all cursor-pointer border ${
+                          language === 'pt'
+                            ? 'bg-[#2D6BFF] border-[#2D6BFF] text-white font-bold shadow-sm'
+                            : 'bg-white border-[#D8E0EA] text-[#475569] hover:bg-slate-50'
+                        }`}
+                      >
+                        PT-BR
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLanguage('en');
+                          setCategory('');
+                        }}
+                        className={`text-[10px] px-2 py-0.5 rounded-full transition-all cursor-pointer border ${
+                          language === 'en'
+                            ? 'bg-[#2D6BFF] border-[#2D6BFF] text-white font-bold shadow-sm'
+                            : 'bg-white border-[#D8E0EA] text-[#475569] hover:bg-slate-50'
+                        }`}
+                      >
+                        EN-US
+                      </button>
+                    </div>
+                  </div>
                   <input
                     type="text"
                     value={category}
-                    onChange={(e) => setCategory(e.target.value)}
+                    onChange={(e) => {
+                      setCategory(e.target.value);
+                      setIsCategoryDropdownOpen(true);
+                    }}
+                    onFocus={() => setIsCategoryDropdownOpen(true)}
                     placeholder="ex: Personal Trainer, Nutricionista, Designer"
                     className="w-full px-3.5 py-2.5 rounded-lg border border-[#D8E0EA] bg-[#F7FAFF] text-sm text-[#061A40] focus:outline-none focus:border-[#2D6BFF] focus:bg-white transition-all"
                   />
+                  
+                  {isCategoryDropdownOpen && filteredRoles.length > 0 && (
+                    <div className="absolute left-0 right-0 mt-1 max-h-60 overflow-y-auto bg-white border border-[#D8E0EA] rounded-xl shadow-lg z-50 py-1.5 animate-fade-in scrollbar-thin">
+                      {filteredRoles.map((cat) => (
+                        <button
+                          key={cat}
+                          type="button"
+                          onClick={() => {
+                            setCategory(cat);
+                            setIsCategoryDropdownOpen(false);
+                          }}
+                          className="w-full text-left px-4 py-2 text-xs text-[#061A40] hover:bg-[#EAF2FF] hover:text-[#002B6A] transition-colors font-medium cursor-pointer"
+                        >
+                          {cat}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-1.5">
@@ -484,9 +770,12 @@ export default function ProfessionalFinderClient({
                     type="text"
                     value={region}
                     onChange={(e) => setRegion(e.target.value)}
-                    placeholder="ex: São Paulo, Rio de Janeiro"
+                    placeholder="ex: São Paulo, Rio de Janeiro, San Francisco"
                     className="w-full px-3.5 py-2.5 rounded-lg border border-[#D8E0EA] bg-[#F7FAFF] text-sm text-[#061A40] focus:outline-none focus:border-[#2D6BFF] focus:bg-white transition-all"
                   />
+                  <p className="text-[10px] text-[#475569]/70">
+                    O mapa à direita irá se mover automaticamente ao preencher este campo.
+                  </p>
                 </div>
 
                 <div className="space-y-1.5">
@@ -499,26 +788,42 @@ export default function ProfessionalFinderClient({
                     className="w-full px-3.5 py-2.5 rounded-lg border border-[#D8E0EA] bg-[#F7FAFF] text-sm text-[#061A40] focus:outline-none focus:border-[#2D6BFF] focus:bg-white transition-all"
                   />
                 </div>
-              </div>
 
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2">
-                <div className="flex items-center gap-3 w-full sm:w-auto">
-                  <label className="text-xs font-semibold text-[#002B6A] shrink-0">Quantidade Máxima</label>
-                  <select
-                    value={limitCount}
-                    onChange={(e) => setLimitCount(Number(e.target.value))}
-                    className="px-3 py-2 text-xs rounded-lg border border-[#D8E0EA] bg-[#F7FAFF] text-[#061A40] focus:outline-none focus:border-[#2D6BFF] focus:bg-white transition-all"
-                  >
-                    <option value={10}>10 perfis</option>
-                    <option value={20}>20 perfis</option>
-                    <option value={50}>50 perfis</option>
-                  </select>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-[#002B6A]">Quantidade Máxima</label>
+                    <select
+                      value={limitCount}
+                      onChange={(e) => setLimitCount(Number(e.target.value))}
+                      className="w-full px-3 py-2 text-xs rounded-lg border border-[#D8E0EA] bg-[#F7FAFF] text-[#061A40] focus:outline-none focus:border-[#2D6BFF] focus:bg-white transition-all"
+                    >
+                      <option value={10}>10 perfis</option>
+                      <option value={20}>20 perfis</option>
+                      <option value={50}>50 perfis</option>
+                    </select>
+                  </div>
+                  
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between text-xs font-semibold text-[#002B6A]">
+                      <span>Raio de Busca</span>
+                      <span className="text-[#2D6BFF] font-bold">{(radius / 1000).toFixed(0)} km</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="1000"
+                      max="20000"
+                      step="1000"
+                      value={radius}
+                      onChange={(e) => setRadius(Number(e.target.value))}
+                      className="w-full h-1 mt-2.5 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-[#2D6BFF]"
+                    />
+                  </div>
                 </div>
 
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="w-full sm:w-auto px-6 py-2.5 rounded-lg text-sm font-semibold text-white bg-[#2D6BFF] hover:bg-[#1b58ec] disabled:bg-slate-200 transition-all flex items-center justify-center gap-2 shadow-sm cursor-pointer"
+                  className="w-full py-2.5 rounded-lg text-sm font-semibold text-white bg-[#2D6BFF] hover:bg-[#1b58ec] disabled:bg-slate-200 transition-all flex items-center justify-center gap-2 shadow-sm cursor-pointer"
                 >
                   {isSubmitting ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -527,14 +832,28 @@ export default function ProfessionalFinderClient({
                   )}
                   Buscar Profissionais
                 </button>
+
+                {formError && (
+                  <div className="p-3 bg-rose-50 border border-rose-200 text-xs text-rose-600 font-medium rounded-lg flex items-center gap-2">
+                    <AlertCircle className="h-4 w-4" />
+                    <span>{formError}</span>
+                  </div>
+                )}
               </div>
 
-              {formError && (
-                <div className="p-3 bg-rose-50 border border-rose-200 text-xs text-rose-600 font-medium rounded-lg flex items-center gap-2">
-                  <AlertCircle className="h-4 w-4" />
-                  <span>{formError}</span>
+              {/* Right Column: Map */}
+              <div className="space-y-1.5 flex flex-col h-full">
+                <div className="flex justify-between items-center shrink-0">
+                  <label className="text-xs font-semibold text-[#002B6A]">Área Geográfica Selecionada</label>
+                  <span className="text-[10px] text-[#475569]/80 font-mono bg-slate-100 px-2 py-0.5 rounded">
+                    {lat.toFixed(4)}, {lng.toFixed(4)}
+                  </span>
                 </div>
-              )}
+                <div 
+                  ref={mapContainerRef} 
+                  className="w-full flex-1 min-h-[220px] rounded-2xl border border-[#D8E0EA] bg-slate-50 overflow-hidden z-10" 
+                />
+              </div>
             </form>
           </div>
         )}
@@ -713,7 +1032,7 @@ export default function ProfessionalFinderClient({
           <table className="w-full border-collapse text-sm text-[#061A40]">
             <thead>
               <tr className="bg-[#F7FAFF] border-b border-[#D8E0EA]">
-                <th className="px-4 py-3 w-10 text-center">
+                <th className="px-4 py-3 w-10 text-center" onClick={(e) => e.stopPropagation()}>
                   <input
                     type="checkbox"
                     checked={filtered.length > 0 && filtered.every(c => selectedIds.has(c.id))}
@@ -735,11 +1054,12 @@ export default function ProfessionalFinderClient({
                   return (
                     <tr
                       key={lead.id}
-                      className={`hover:bg-[#F7FAFF]/50 transition-colors ${
+                      onClick={() => setActiveLead(lead)}
+                      className={`hover:bg-[#F7FAFF]/50 transition-colors group cursor-pointer ${
                         isSelected ? 'bg-[#EAF2FF]/30' : ''
                       }`}
                     >
-                      <td className="px-4 py-3 text-center">
+                      <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
                         <input
                           type="checkbox"
                           checked={isSelected}
@@ -766,7 +1086,7 @@ export default function ProfessionalFinderClient({
                           {lead.professional_score}% ({lead.lead_grade})
                         </span>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                         {lead.profile_url ? (
                           <a
                             href={lead.profile_url}
@@ -819,6 +1139,146 @@ export default function ProfessionalFinderClient({
           </div>
         )}
       </div>
+
+      {/* Lead Details Modal */}
+      {activeLead && (
+        <div className="fixed inset-0 bg-[#061A40]/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div 
+            className="fixed inset-0" 
+            onClick={() => setActiveLead(null)} 
+          />
+          <div className="bg-white w-full max-w-lg rounded-2xl border border-[#D8E0EA] shadow-2xl overflow-hidden transform scale-100 transition-all duration-300 relative z-10">
+            {/* Modal Header */}
+            <div className="px-6 py-4 border-b border-[#D8E0EA] bg-[#F7FAFF] flex justify-between items-center">
+              <span className="text-xs font-extrabold text-[#2D6BFF] uppercase tracking-wider">Perfil Profissional</span>
+              <button 
+                type="button"
+                onClick={() => setActiveLead(null)}
+                className="p-1 rounded-md text-[#475569] hover:bg-slate-200 transition-colors cursor-pointer"
+                title="Fechar"
+              >
+                <X className="h-4.5 w-4.5" />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6 space-y-6">
+              {/* Title & Badges */}
+              <div>
+                <h3 className="text-xl font-bold text-[#002B6A]">{activeLead.display_name}</h3>
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  <span className="px-2.5 py-0.5 bg-[#EAF2FF] text-[#002B6A] text-[10px] font-semibold rounded-full border border-[#2D6BFF]/10">
+                    {activeLead.professional_role}
+                  </span>
+                  <span className="px-2.5 py-0.5 bg-slate-100 text-slate-700 text-[10px] font-semibold rounded-full">
+                    {activeLead.location}
+                  </span>
+                </div>
+              </div>
+
+              {/* Data Fields */}
+              <div className="space-y-4">
+                {/* Sector / Industry */}
+                <div className="flex items-start gap-3">
+                  <Briefcase className="h-4 w-4 text-[#475569] mt-0.5" />
+                  <div className="space-y-0.5">
+                    <span className="text-[10px] font-bold text-[#475569] uppercase tracking-wider">Setor ou Área</span>
+                    <span className="block text-sm font-semibold text-[#002B6A]">{activeLead.industry}</span>
+                  </div>
+                </div>
+
+                {/* Profile URL */}
+                <div className="flex items-start gap-3">
+                  <Globe className="h-4 w-4 text-[#475569] mt-0.5" />
+                  <div className="space-y-0.5">
+                    <span className="text-[10px] font-bold text-[#475569] uppercase tracking-wider">URL do Perfil</span>
+                    {activeLead.profile_url ? (
+                      <a 
+                        href={activeLead.profile_url} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="block text-sm font-semibold text-[#2D6BFF] hover:underline truncate max-w-xs md:max-w-md"
+                      >
+                        {activeLead.profile_url}
+                      </a>
+                    ) : (
+                      <span className="block text-sm text-[#475569]/60 italic">Não disponível</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Contact Channel */}
+                <div className="flex items-start gap-3">
+                  <Send className="h-4 w-4 text-[#475569] mt-0.5" />
+                  <div className="space-y-0.5">
+                    <span className="text-[10px] font-bold text-[#475569] uppercase tracking-wider">Canal / Contato Direto</span>
+                    <span className="block text-sm font-semibold text-[#002B6A] break-all">
+                      {activeLead.contact_channel || 'Perfil Público'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Quality Score & Grade */}
+                <div className="flex items-start gap-3">
+                  <Award className="h-4 w-4 text-[#475569] mt-0.5" />
+                  <div className="space-y-0.5">
+                    <span className="text-[10px] font-bold text-[#475569] uppercase tracking-wider">Nível de Oportunidade</span>
+                    <span className="block text-sm font-bold text-[#002B6A]">
+                      Score: {activeLead.professional_score}% (Grade {activeLead.lead_grade})
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="px-6 py-4 bg-slate-50 border-t border-[#D8E0EA] flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveLead(null)}
+                  className="px-4 py-2 bg-white border border-[#D8E0EA] text-[#475569] hover:bg-slate-50 text-xs font-bold rounded-lg transition-all cursor-pointer"
+                >
+                  Voltar
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (confirm('Deseja realmente excluir este profissional?')) {
+                      setIsDeleting(true);
+                      const res = await deleteLeads([activeLead.id]);
+                      setIsDeleting(false);
+                      if (res.error) {
+                        alert(res.error);
+                      } else {
+                        setActiveLead(null);
+                        router.refresh();
+                      }
+                    }
+                  }}
+                  disabled={isDeleting}
+                  className="px-4 py-2 bg-rose-50 border border-rose-200 text-rose-600 hover:bg-rose-100 disabled:opacity-50 text-xs font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Excluir Registro
+                </button>
+              </div>
+              
+              {activeLead.profile_url && (
+                <a
+                  href={activeLead.profile_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-2 bg-[#2D6BFF] text-white hover:bg-[#1b58ec] text-xs font-bold rounded-lg transition-all inline-flex items-center gap-1.5 shadow-sm"
+                >
+                  <Globe className="h-3.5 w-3.5" />
+                  Acessar Perfil
+                </a>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
