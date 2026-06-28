@@ -1,5 +1,150 @@
 export type ContactStatus = 'new' | 'contacted' | 'waiting' | 'replied' | 'converted' | 'closed';
 export type WorkspaceRole = 'owner' | 'admin' | 'manager' | 'member' | 'viewer';
+export type LeadEntityType = 'business' | 'person' | 'unknown';
+export type AiLeadStatus =
+  | 'not_analyzed'
+  | 'prechecked'
+  | 'analyzing'
+  | 'qualified'
+  | 'needs_review'
+  | 'rejected'
+  | 'error';
+export type AiOpportunityType =
+  | 'missing_website'
+  | 'weak_website'
+  | 'poor_social_presence'
+  | 'coachmetric_fit'
+  | 'columb_fit'
+  | 'other'
+  | 'unknown';
+export type AiRecommendedAction =
+  | 'reject'
+  | 'review'
+  | 'draft_email'
+  | 'enrich_more'
+  | 'create_campaign_candidate';
+export type AiLeadGrade = 'A' | 'B' | 'C' | 'D';
+
+export interface AiLanguageDecision {
+  country_guess: string;
+  language: string;
+  reason: string;
+  fallback_used: boolean;
+}
+
+export interface AiCostControlNotes {
+  provider: 'mock' | 'openai' | 'anthropic' | 'gemini' | 'other';
+  model?: string;
+  prompt_version: string;
+  external_ai_called: boolean;
+  website_fetch_used: boolean;
+  social_fetch_used: boolean;
+  evidence_chars_used: number;
+  max_evidence_chars: number;
+  daily_lead_limit: number;
+  notes: string[];
+}
+
+export interface AiLeadEvidenceInput {
+  source_type: 'manual' | 'website' | 'social' | 'directory' | 'crm' | 'other';
+  url?: string | null;
+  title?: string | null;
+  text_excerpt?: string | null;
+  metadata?: Record<string, unknown>;
+}
+
+export interface AiLeadAnalysisGoal {
+  offer_focus?: string;
+  target_audience?: string;
+  preferred_language?: string;
+}
+
+export interface AiLeadAnalysisOutput {
+  is_real_prospect: boolean;
+  entity_type: LeadEntityType;
+  fit_score: number;
+  grade: AiLeadGrade;
+  confidence: number;
+  opportunity_type: AiOpportunityType;
+  offer_angle: string;
+  country_guess: string;
+  language: string;
+  language_decision: AiLanguageDecision;
+  summary: string;
+  facts: string[];
+  inferences: string[];
+  risks: string[];
+  unknowns: string[];
+  recommended_action: AiRecommendedAction;
+  email_draft?: {
+    subject: string;
+    body: string;
+  } | null;
+  follow_up_draft?: {
+    body: string;
+  } | null;
+  evidence_used: AiLeadEvidenceInput[];
+  cost_control_notes: AiCostControlNotes;
+}
+
+export interface LeadEvidenceSource {
+  id: string;
+  workspace_id: string;
+  lead_id: string;
+  source_type: AiLeadEvidenceInput['source_type'];
+  url?: string | null;
+  title?: string | null;
+  text_excerpt?: string | null;
+  metadata: Record<string, unknown>;
+  fetched_at?: string | null;
+  created_at: string;
+}
+
+export interface LeadAiAnalysis {
+  id: string;
+  workspace_id: string;
+  lead_id: string;
+  status: AiLeadStatus;
+  entity_type: LeadEntityType;
+  fit_score: number;
+  grade: AiLeadGrade;
+  confidence: number;
+  opportunity_type: AiOpportunityType;
+  offer_angle?: string | null;
+  country_guess?: string | null;
+  language?: string | null;
+  summary?: string | null;
+  facts: string[];
+  inferences: string[];
+  risks: string[];
+  unknowns: string[];
+  recommended_action: AiRecommendedAction;
+  evidence_used: AiLeadEvidenceInput[];
+  cost_control_notes: AiCostControlNotes;
+  model?: string | null;
+  provider: string;
+  prompt_version: string;
+  input_hash: string;
+  created_at: string;
+  reviewed_at?: string | null;
+  reviewed_by?: string | null;
+}
+
+export interface LeadAiDraft {
+  id: string;
+  workspace_id: string;
+  lead_id: string;
+  analysis_id: string;
+  channel: 'email' | 'linkedin' | 'phone' | 'other';
+  subject?: string | null;
+  body: string;
+  follow_up_body?: string | null;
+  language: string;
+  status: 'draft' | 'approved' | 'rejected' | 'archived';
+  created_at: string;
+  approved_at?: string | null;
+  approved_by?: string | null;
+}
 
 export interface Workspace {
   id: string;

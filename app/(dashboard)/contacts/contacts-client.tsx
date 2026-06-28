@@ -3,19 +3,10 @@
 import React, { useState } from 'react';
 import { Contact, ContactStatus } from '@/types';
 import AddLeadModal from '@/components/add-lead-modal';
-import { Plus, Upload, Users, ExternalLink, ChevronUp, ChevronDown, ChevronsUpDown, Edit2, Trash2, Loader2, Star, X, Mail, Phone, MapPin, Building } from 'lucide-react';
+import { Plus, Upload, Users, ChevronUp, ChevronDown, ChevronsUpDown, Edit2, Trash2, Loader2, Star, X, Mail, Phone, MapPin, Building } from 'lucide-react';
 import { deleteContact, updateContact, bulkDeleteContacts, bulkUpdateContactsStatus } from '@/app/actions/contact';
 import { useRouter } from 'next/navigation';
 import { hasPermission, WorkspaceRole } from '@/lib/permissions';
-
-// lucide-react@1.18 removed the LinkedIn icon — using an inline SVG instead
-const LinkedinIcon = ({ className }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-    <path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z" />
-    <rect x="2" y="9" width="4" height="12" />
-    <circle cx="4" cy="4" r="2" />
-  </svg>
-);
 
 const STATUS_STYLES: Record<ContactStatus, string> = {
   new:       'bg-[#EAF2FF] text-[#2D6BFF]',

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { createTemplate, updateTemplate } from '@/app/actions/template';
 import { Template } from '@/types';
 import { RichTextEditor, RichTextEditorRef } from '@/components/rich-text-editor';
-import { X, Plus, Loader2, Mail, Edit3, Type, FileText, Sparkles } from 'lucide-react';
+import { X, Plus, Loader2, Edit3, Type, FileText, Sparkles } from 'lucide-react';
 
 const TEMPLATE_PRESETS = [
   {

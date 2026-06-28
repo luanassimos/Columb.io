@@ -57,7 +57,6 @@ export default function CampaignModal({
   }, [isOpen]);
 
   const [alreadySentCount, setAlreadySentCount] = useState<number>(0);
-  const [checkingOverlap, setCheckingOverlap] = useState<boolean>(false);
   const [targetAudienceCount, setTargetAudienceCount] = useState<number>(0);
   const [countingAudience, setCountingAudience] = useState<boolean>(false);
 
@@ -98,7 +97,6 @@ export default function CampaignModal({
     }
 
     const checkAudienceAndOverlap = async () => {
-      setCheckingOverlap(true);
       setCountingAudience(true);
       try {
         const { createBrowserClient } = await import('@/lib/supabase/client');
@@ -148,7 +146,6 @@ export default function CampaignModal({
         setAlreadySentCount(0);
         setTargetAudienceCount(0);
       } finally {
-        setCheckingOverlap(false);
         setCountingAudience(false);
       }
     };

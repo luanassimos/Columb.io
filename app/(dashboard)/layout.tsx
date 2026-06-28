@@ -6,7 +6,6 @@ import NotificationCenter from '@/components/notification-center';
 import Sidebar from '@/components/sidebar';
 import { User } from 'lucide-react';
 import { WorkspaceRole } from '@/lib/permissions';
-import { getEmailSendMode } from '@/lib/email-mode';
 
 export default async function DashboardLayout({
   children,
@@ -14,7 +13,6 @@ export default async function DashboardLayout({
   children: React.ReactNode;
 }) {
   const supabase = await createServerClient();
-  const emailSendMode = getEmailSendMode();
 
   // 1. Get auth user
   const { data: { user } } = await supabase.auth.getUser();

@@ -11,11 +11,9 @@ import {
   Mail,
   User,
   Clock,
-  ChevronRight,
   Eye,
   EyeOff,
   Building,
-  Tag,
   MessageSquare,
   ArrowUpRight,
   ChevronDown,
@@ -69,7 +67,6 @@ export default function InboxClient({
   contacts,
   notifications,
   emailJobs,
-  role,
   initialTab,
   initialId
 }: InboxClientProps) {

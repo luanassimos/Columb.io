@@ -10,7 +10,6 @@ import {
   Users,
   Mail,
   Send,
-  Inbox,
   Bell,
   Settings,
   LogOut,
