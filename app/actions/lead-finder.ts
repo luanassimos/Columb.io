@@ -4,6 +4,7 @@ import { createServerClient } from '@/lib/supabase/server';
 import { getActiveWorkspaceContext } from '@/lib/workspace';
 import { assertPermission } from '@/lib/permissions';
 import { revalidatePath } from 'next/cache';
+import { calculateLeadScore, calculateProfessionalScore } from '@/lib/lead-scoring';
 
 export interface CreateLeadJobInput {
   category: string;
@@ -13,6 +14,8 @@ export interface CreateLeadJobInput {
   lng?: number;
   radius?: number; // in meters
   onlyEmail?: boolean;
+  leadEntityType?: 'company' | 'professional';
+  keywords?: string;
 }
 
 export async function createLeadJob(input: CreateLeadJobInput) {
@@ -55,6 +58,8 @@ export async function createLeadJob(input: CreateLeadJobInput) {
       lng: input.lng !== undefined ? input.lng : null,
       radius: input.radius !== undefined ? input.radius : null,
       only_email: input.onlyEmail ?? false,
+      lead_entity_type: input.leadEntityType ?? 'company',
+      keywords: input.keywords ? input.keywords.trim() : null,
     })
     .select('id')
     .single();
@@ -65,6 +70,8 @@ export async function createLeadJob(input: CreateLeadJobInput) {
   }
 
   revalidatePath('/lead-finder');
+  revalidatePath('/lead-finder/companies');
+  revalidatePath('/lead-finder/professionals');
   return { success: true, jobId: job.id };
 }
 
@@ -135,38 +142,76 @@ export async function importLeadsToContacts(leadIds: string[]) {
     return { error: 'Nenhum lead encontrado para importação.' };
   }
 
+  // Fetch professional details if any leads are professionals
+  const profLeadIds = leads.filter(l => l.lead_entity_type === 'professional').map(l => l.id);
+  let profMap = new Map<string, any>();
+  if (profLeadIds.length > 0) {
+    const { data: profDetails } = await supabase
+      .from('professional_leads')
+      .select('*')
+      .in('lead_id', profLeadIds);
+    if (profDetails) {
+      profMap = new Map(profDetails.map(p => [p.lead_id, p]));
+    }
+  }
+
   // 2. Prepare contacts to insert
   const contactsToInsert = leads.map((lead) => {
-    // Generate email
+    const isProf = lead.lead_entity_type === 'professional';
+    const profInfo = profMap.get(lead.id);
+
     let email = '';
-    if (lead.email) {
-      email = lead.email;
-    } else {
-      const domain = lead.website ? extractDomain(lead.website) : null;
-      if (domain) {
-        email = `contato@${domain}`;
+    let tags = ['Lead Finder', lead.category, lead.region];
+    let company = lead.name;
+
+    if (isProf && profInfo) {
+      tags = ['Professional Finder', profInfo.professional_role || lead.category, profInfo.location || lead.region];
+      company = profInfo.professional_role || 'Professional Lead';
+      
+      if (lead.email) {
+        email = lead.email;
+      } else if (profInfo.contact_channel && profInfo.contact_channel.includes('@')) {
+        email = profInfo.contact_channel;
       } else {
-        // Clean company name for email slug
         const slug = lead.name
           .toLowerCase()
           .normalize('NFD')
-          .replace(/[\u0300-\u036f]/g, '') // remove accents
-          .replace(/[^a-z0-9]/g, '-') // replace non-alphanumeric with hyphen
-          .replace(/-+/g, '-') // collapse multiple hyphens
+          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/[^a-z0-9]/g, '-')
+          .replace(/-+/g, '-')
           .trim()
-          .replace(/^-|-$/g, ''); // trim hyphens
-        email = `contato-${slug || 'lead'}-${lead.id.substring(0, 6)}@columb-placeholder.com`;
+          .replace(/^-|-$/g, '');
+        email = `${slug || 'professional'}-${lead.id.substring(0, 6)}@linkedin-placeholder.com`;
+      }
+    } else {
+      if (lead.email) {
+        email = lead.email;
+      } else {
+        const domain = lead.website ? extractDomain(lead.website) : null;
+        if (domain) {
+          email = `contato@${domain}`;
+        } else {
+          const slug = lead.name
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^a-z0-9]/g, '-')
+            .replace(/-+/g, '-')
+            .trim()
+            .replace(/^-|-$/g, '');
+          email = `contato-${slug || 'lead'}-${lead.id.substring(0, 6)}@columb-placeholder.com`;
+        }
       }
     }
 
     return {
       workspace_id: workspaceId,
       name: lead.name,
-      company: lead.name, // The lead name represents the company name
+      company: company,
       email: email,
       phone: lead.phone || null,
       city: lead.region,
-      tags: ['Lead Finder', lead.category, lead.region],
+      tags: tags,
       status: 'new',
       rating: 0,
       imported_at: new Date().toISOString(),
@@ -183,6 +228,8 @@ export async function importLeadsToContacts(leadIds: string[]) {
 
   revalidatePath('/contacts');
   revalidatePath('/lead-finder');
+  revalidatePath('/lead-finder/companies');
+  revalidatePath('/lead-finder/professionals');
 
   return { success: true, count: contactsToInsert.length };
 }
@@ -210,6 +257,8 @@ export async function deleteLeads(leadIds: string[]) {
   }
 
   revalidatePath('/lead-finder');
+  revalidatePath('/lead-finder/companies');
+  revalidatePath('/lead-finder/professionals');
   return { success: true, count: leadIds.length };
 }
 
@@ -225,7 +274,7 @@ export async function recalculateLeadsScore() {
   // 1. Fetch all leads for this workspace
   const { data: leads, error: fetchError } = await supabase
     .from('leads')
-    .select('id, phone, website, address, category, rating, reviews_count, contact_channels')
+    .select('id, name, phone, website, address, category, region, rating, reviews_count, contact_channels, lead_entity_type')
     .eq('workspace_id', workspaceId);
 
   if (fetchError) {
@@ -237,8 +286,18 @@ export async function recalculateLeadsScore() {
     return { success: true, count: 0 };
   }
 
-  // Import calculateLeadScore
-  const { calculateLeadScore } = await import('@/lib/lead-scoring');
+  // Fetch professional details
+  const profLeadIds = leads.filter(l => l.lead_entity_type === 'professional').map(l => l.id);
+  let profMap = new Map<string, any>();
+  if (profLeadIds.length > 0) {
+    const { data: profDetails } = await supabase
+      .from('professional_leads')
+      .select('*')
+      .in('lead_id', profLeadIds);
+    if (profDetails) {
+      profMap = new Map(profDetails.map(p => [p.lead_id, p]));
+    }
+  }
 
   // 2. Update each lead
   const chunkSize = 10;
@@ -248,66 +307,91 @@ export async function recalculateLeadsScore() {
     const chunk = leads.slice(i, i + chunkSize);
     await Promise.all(
       chunk.map(async (lead) => {
-        const scoreInfo = calculateLeadScore(lead);
-        
-        // Calculate contact intelligence
-        const channels = (lead.contact_channels || {}) as any;
-        let contactScore = 0;
-        let reachabilityScore = 0;
+        const isProf = lead.lead_entity_type === 'professional';
 
-        const hasPhone = !!lead.phone && lead.phone.trim().length > 0;
-        const hasWebsite = !!lead.website && lead.website.trim().length > 0;
-        const hasForm = !!channels.contact_form;
-        const hasInsta = !!channels.instagram;
-        const hasFb = !!channels.facebook;
-        const hasWa = !!channels.whatsapp;
+        if (isProf) {
+          const profInfo = profMap.get(lead.id);
+          const scoreInfo = calculateProfessionalScore(profInfo || {
+            display_name: lead.name,
+            professional_role: lead.category,
+            location: lead.region,
+          });
 
-        // Contact Score
-        if (hasPhone) contactScore += 30;
-        if (hasWebsite) contactScore += 20;
-        if (hasForm) contactScore += 20;
-        if (hasInsta) contactScore += 10;
-        if (hasFb) contactScore += 10;
-        if (hasWa) contactScore += 10;
-        contactScore = Math.min(contactScore, 100);
+          const { error: updateError } = await supabase
+            .from('leads')
+            .update({
+              lead_score: scoreInfo.professional_score,
+              lead_grade: scoreInfo.lead_grade,
+              scoring_version: 1,
+            })
+            .eq('id', lead.id);
 
-        // Reachability Score
-        if (hasPhone) reachabilityScore += 40;
-        if (hasWebsite) reachabilityScore += 15;
-        if (hasInsta) reachabilityScore += 15;
-        if (hasForm) reachabilityScore += 20;
-        if (hasWa) reachabilityScore += 10;
-        reachabilityScore = Math.min(reachabilityScore, 100);
-
-        // Quality Grade
-        let quality: 'low' | 'medium' | 'high' = 'low';
-        if (reachabilityScore >= 80) {
-          quality = 'high';
-        } else if (reachabilityScore >= 30) {
-          quality = 'medium';
-        }
-
-        const { error: updateError } = await supabase
-          .from('leads')
-          .update({
-            lead_score: scoreInfo.lead_score,
-            lead_grade: scoreInfo.lead_grade,
-            scoring_version: 1,
-            contact_score: contactScore,
-            reachability_score: reachabilityScore,
-            contact_quality: quality,
-          })
-          .eq('id', lead.id);
-
-        if (!updateError) {
-          updatedCount++;
+          if (!updateError) {
+            await supabase
+              .from('professional_leads')
+              .update({ professional_score: scoreInfo.professional_score })
+              .eq('lead_id', lead.id);
+            updatedCount++;
+          }
         } else {
-          console.error(`Error updating score for lead ${lead.id}:`, updateError);
+          const scoreInfo = calculateLeadScore(lead);
+          
+          // Calculate contact intelligence
+          const channels = (lead.contact_channels || {}) as any;
+          let contactScore = 0;
+          let reachabilityScore = 0;
+
+          const hasPhone = !!lead.phone && lead.phone.trim().length > 0;
+          const hasWebsite = !!lead.website && lead.website.trim().length > 0;
+          const hasForm = !!channels.contact_form;
+          const hasInsta = !!channels.instagram;
+          const hasFb = !!channels.facebook;
+          const hasWa = !!channels.whatsapp;
+
+          if (hasPhone) contactScore += 30;
+          if (hasWebsite) contactScore += 20;
+          if (hasForm) contactScore += 20;
+          if (hasInsta) contactScore += 10;
+          if (hasFb) contactScore += 10;
+          if (hasWa) contactScore += 10;
+          contactScore = Math.min(contactScore, 100);
+
+          if (hasPhone) reachabilityScore += 40;
+          if (hasWebsite) reachabilityScore += 15;
+          if (hasInsta) reachabilityScore += 15;
+          if (hasForm) reachabilityScore += 20;
+          if (hasWa) reachabilityScore += 10;
+          reachabilityScore = Math.min(reachabilityScore, 100);
+
+          let quality: 'low' | 'medium' | 'high' = 'low';
+          if (reachabilityScore >= 80) {
+            quality = 'high';
+          } else if (reachabilityScore >= 30) {
+            quality = 'medium';
+          }
+
+          const { error: updateError } = await supabase
+            .from('leads')
+            .update({
+              lead_score: scoreInfo.lead_score,
+              lead_grade: scoreInfo.lead_grade,
+              scoring_version: 1,
+              contact_score: contactScore,
+              reachability_score: reachabilityScore,
+              contact_quality: quality,
+            })
+            .eq('id', lead.id);
+
+          if (!updateError) {
+            updatedCount++;
+          }
         }
       })
     );
   }
 
   revalidatePath('/lead-finder');
+  revalidatePath('/lead-finder/companies');
+  revalidatePath('/lead-finder/professionals');
   return { success: true, count: updatedCount };
 }

@@ -17,7 +17,11 @@ import {
   ChevronLeft,
   ChevronRight,
   Calendar,
-  Target
+  Target,
+  Building,
+  Briefcase,
+  ChevronUp,
+  ChevronDown
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -31,10 +35,21 @@ export default function Sidebar({ profileName, userEmail, mobileOpen, onClose }:
   const [isCollapsed, setIsCollapsed] = useState(false);
   const pathname = usePathname();
 
+  const [isCaptarLeadsOpen, setIsCaptarLeadsOpen] = useState(pathname.startsWith('/lead-finder'));
+
   const mainNavItems = [
     { label: 'Dashboard', icon: LayoutDashboard, href: '/dashboard' },
     { label: 'Inbox', icon: Inbox, href: '/inbox' },
-    { label: 'Captar Leads', icon: Target, href: '/lead-finder' },
+    {
+      label: 'Captar Leads',
+      icon: Target,
+      href: '/lead-finder',
+      isDropdown: true,
+      subItems: [
+        { label: 'Empresas', icon: Building, href: '/lead-finder/companies' },
+        { label: 'Profissionais', icon: Briefcase, href: '/lead-finder/professionals' }
+      ]
+    },
     { label: 'Leads', icon: Users, href: '/contacts' },
     { label: 'Templates', icon: Mail, href: '/templates' },
     { label: 'Campaigns', icon: Calendar, href: '/campaigns' },
@@ -78,7 +93,94 @@ export default function Sidebar({ profileName, userEmail, mobileOpen, onClose }:
 
           {/* Main Navigation Links */}
           <nav className="p-4 space-y-1">
-            {mainNavItems.map((item) => {
+            {mainNavItems.map((item: any) => {
+              if (item.isDropdown) {
+                const isChildActive = pathname.startsWith('/lead-finder');
+                return (
+                  <div key={item.href} className="space-y-1">
+                    <button
+                      type="button"
+                      onClick={() => setIsCaptarLeadsOpen(!isCaptarLeadsOpen)}
+                      className={`w-full flex items-center rounded-lg font-medium transition-all duration-205 group h-11 px-3.5 justify-between text-left cursor-pointer ${
+                        isCollapsed ? 'justify-center' : 'gap-3 text-sm'
+                      } ${
+                        isChildActive
+                          ? 'text-white bg-[#061A40]/30 border-l-2 border-[#2D6BFF]'
+                          : 'text-blue-100 hover:text-white hover:bg-[#061A40]/30'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <item.icon
+                          className={`h-4.5 w-4.5 shrink-0 transition-colors ${
+                            isChildActive ? 'text-[#2D6BFF]' : 'text-blue-200 group-hover:text-white'
+                          }`}
+                        />
+                        {!isCollapsed && (
+                          <span className="transition-all duration-300 ease-in-out">
+                            {item.label}
+                          </span>
+                        )}
+                      </div>
+                      {!isCollapsed && (
+                        isCaptarLeadsOpen ? (
+                          <ChevronUp className="h-4 w-4 text-blue-200" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4 text-blue-200" />
+                        )
+                      )}
+                    </button>
+
+                    {/* Sub Menu Items */}
+                    {isCaptarLeadsOpen && !isCollapsed && (
+                      <div className="pl-6 space-y-1 border-l border-blue-900/30 ml-5 animate-fade-in">
+                        {item.subItems!.map((subItem: any) => {
+                          const isSubActive = pathname === subItem.href;
+                          return (
+                            <Link
+                              key={subItem.href}
+                              href={subItem.href}
+                              onClick={() => onClose?.()}
+                              className={`flex items-center gap-2 rounded-lg font-medium transition-all duration-205 h-9 px-3 text-xs ${
+                                isSubActive
+                                  ? 'text-white bg-[#2D6BFF]/20 font-semibold border border-[#2D6BFF]/30'
+                                  : 'text-blue-200 hover:text-white hover:bg-[#061A40]/20'
+                              }`}
+                            >
+                              <subItem.icon className={`h-3.5 w-3.5 ${isSubActive ? 'text-[#2D6BFF]' : 'text-blue-300'}`} />
+                              <span>{subItem.label}</span>
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    )}
+                    
+                    {/* Collapsed view fallback */}
+                    {isCollapsed && (
+                      <div className="flex flex-col items-center gap-1.5 py-1">
+                        {item.subItems!.map((subItem: any) => {
+                          const isSubActive = pathname === subItem.href;
+                          return (
+                            <Link
+                              key={subItem.href}
+                              href={subItem.href}
+                              title={subItem.label}
+                              onClick={() => onClose?.()}
+                              className={`flex items-center justify-center rounded-lg h-8 w-8 transition-all ${
+                                isSubActive
+                                  ? 'text-white bg-[#2D6BFF] shadow-sm'
+                                  : 'text-blue-200 hover:text-white hover:bg-[#061A40]/30'
+                              }`}
+                            >
+                              <subItem.icon className="h-4 w-4" />
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
               const isActive = pathname === item.href;
               return (
                 <Link
