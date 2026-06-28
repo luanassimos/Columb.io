@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import Image from 'next/image';
-import { Check, X, Send } from 'lucide-react';
+import { Check, X } from 'lucide-react';
 import type { EmailSendMode } from '@/lib/email-mode';
 
 interface SendSuccessModalProps {
@@ -20,29 +20,12 @@ const FLY_FRAMES = [
   '/fly02.webp',
 ];
 
-export default function SendSuccessModal({ isOpen, onClose, emailSendMode = 'mock', campaignId }: SendSuccessModalProps) {
+export default function SendSuccessModal({ isOpen, onClose, campaignId }: SendSuccessModalProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [animationPhase, setAnimationPhase] = useState<'idle' | 'takeoff' | 'sent'>('idle');
   const [mounted, setMounted] = useState(false);
 
   const [status, setStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [result, setResult] = useState<{
-    emailSendMode?: EmailSendMode;
-    newJobsQueued?: number;
-    duplicateJobsSkipped?: number;
-    sentCount?: number;
-    mockedCount?: number;
-    dryRunCount?: number;
-    failedCount?: number;
-    retriedCount?: number;
-    skippedCount?: number;
-    message?: string;
-  } | null>(null);
-  const visibleMode = result?.emailSendMode || emailSendMode;
-  const visibleModeLabel = visibleMode === 'dry_run' ? 'dry run' : visibleMode;
-  const isLive = visibleMode === 'live';
-
   useEffect(() => {
     setMounted(true);
     return () => setMounted(false);
@@ -62,15 +45,11 @@ export default function SendSuccessModal({ isOpen, onClose, emailSendMode = 'moc
     if (!isOpen) {
       setAnimationPhase('idle');
       setStatus('idle');
-      setErrorMessage(null);
-      setResult(null);
       return;
     }
 
     setAnimationPhase('idle');
     setStatus('sending');
-
-    const startTime = Date.now();
 
     let isSubscribed = true;
 
@@ -84,7 +63,7 @@ export default function SendSuccessModal({ isOpen, onClose, emailSendMode = 'moc
         }
         return res.json();
       })
-      .then((data) => {
+      .then(() => {
         if (!isSubscribed) return;
 
         // Start flight animation upon successful request completion
@@ -93,7 +72,6 @@ export default function SendSuccessModal({ isOpen, onClose, emailSendMode = 'moc
         // Let the takeoff animation run for 1s (matching keyframes duration) before showing success state
         setTimeout(() => {
           if (!isSubscribed) return;
-          setResult(data);
           setAnimationPhase('sent');
           setStatus('success');
 
@@ -108,7 +86,6 @@ export default function SendSuccessModal({ isOpen, onClose, emailSendMode = 'moc
       .catch((err) => {
         if (!isSubscribed) return;
         console.error('[Outreach Send] Error triggering queue:', err);
-        setErrorMessage(err.message || 'Falha ao processar campanha');
         setStatus('error');
       });
 

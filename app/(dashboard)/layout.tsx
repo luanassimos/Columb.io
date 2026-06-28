@@ -2,7 +2,6 @@ import React from 'react';
 import { createServerClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import { WorkspaceRole } from '@/lib/permissions';
-import { getEmailSendMode } from '@/lib/email-mode';
 import DashboardLayoutClient from '@/components/dashboard-layout-client';
 
 export default async function DashboardLayout({
@@ -11,7 +10,6 @@ export default async function DashboardLayout({
   children: React.ReactNode;
 }) {
   const supabase = await createServerClient();
-  const emailSendMode = getEmailSendMode();
 
   // 1. Get auth user
   const { data: { user } } = await supabase.auth.getUser();

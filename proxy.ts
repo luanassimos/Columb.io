@@ -45,6 +45,9 @@ export async function proxy(request: NextRequest) {
     path.startsWith('/contacts') ||
     path.startsWith('/templates') ||
     path.startsWith('/campaigns') ||
+    path.startsWith('/blasts') ||
+    path.startsWith('/inbox') ||
+    path.startsWith('/notifications') ||
     path.startsWith('/settings');
 
   if (!user && isProtectedPath) {
