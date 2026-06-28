@@ -63,3 +63,61 @@ export function calculateLeadScore(lead: {
 
   return { lead_score: score, lead_grade: grade };
 }
+
+export interface ScoredProfessionalLead {
+  professional_score: number;
+  lead_grade: 'A' | 'B' | 'C' | 'D';
+}
+
+export function calculateProfessionalScore(lead: {
+  display_name?: string | null;
+  professional_role?: string | null;
+  industry?: string | null;
+  location?: string | null;
+  profile_url?: string | null;
+  contact_channel?: string | null;
+}): ScoredProfessionalLead {
+  let score = 0;
+
+  // 1. Display Name: +20
+  if (lead.display_name && lead.display_name.trim().length > 0) {
+    score += 20;
+  }
+
+  // 2. Role: +20
+  if (lead.professional_role && lead.professional_role.trim().length > 0) {
+    score += 20;
+  }
+
+  // 3. Industry: +15
+  if (lead.industry && lead.industry.trim().length > 0) {
+    score += 15;
+  }
+
+  // 4. Location: +15
+  if (lead.location && lead.location.trim().length > 0) {
+    score += 15;
+  }
+
+  // 5. Profile URL: +15
+  if (lead.profile_url && lead.profile_url.trim().length > 0) {
+    score += 15;
+  }
+
+  // 6. Contact Channel: +15
+  if (lead.contact_channel && lead.contact_channel.trim().length > 0) {
+    score += 15;
+  }
+
+  // Convert to Grade
+  let grade: 'A' | 'B' | 'C' | 'D' = 'D';
+  if (score >= 80) {
+    grade = 'A';
+  } else if (score >= 60) {
+    grade = 'B';
+  } else if (score >= 40) {
+    grade = 'C';
+  }
+
+  return { professional_score: score, lead_grade: grade };
+}
