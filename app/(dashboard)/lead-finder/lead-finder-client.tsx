@@ -107,16 +107,16 @@ export default function LeadFinderClient({
   const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Close dropdown when clicking outside
+  // Close dropdown when clicking outside (using capture phase to bypass stopPropagation)
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setIsCategoryDropdownOpen(false);
       }
     }
-    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('click', handleClickOutside, true);
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('click', handleClickOutside, true);
     };
   }, []);
 
@@ -150,6 +150,7 @@ export default function LeadFinderClient({
   const [markerInstance, setMarkerInstance] = useState<any>(null);
   const [circleInstance, setCircleInstance] = useState<any>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
+  const isMapClickRef = useRef(false);
 
   // Selection states
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -275,11 +276,47 @@ export default function LeadFinderClient({
         weight: 1.5,
       }).addTo(map);
 
+      const reverseGeocode = async (latitude: number, longitude: number) => {
+        try {
+          const response = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
+          );
+          if (response.ok) {
+            const data = await response.json();
+            if (data && data.address) {
+              const address = data.address;
+              const city = address.city || address.town || address.village || address.municipality;
+              const suburb = address.suburb || address.neighbourhood || address.quarter;
+              const state = address.state;
+              
+              let detectedRegion = '';
+              if (suburb && city) {
+                detectedRegion = `${suburb}, ${city}`;
+              } else if (city) {
+                detectedRegion = state ? `${city}, ${state}` : city;
+              } else if (address.road) {
+                detectedRegion = address.road;
+              } else if (data.display_name) {
+                detectedRegion = data.display_name.split(',').slice(0, 2).join(',').trim();
+              }
+              
+              if (detectedRegion) {
+                isMapClickRef.current = true;
+                setRegion(detectedRegion);
+              }
+            }
+          }
+        } catch (err) {
+          console.error('Erro ao fazer geocodificação reversa:', err);
+        }
+      };
+
       // Update state on marker drag
       marker.on('dragend', () => {
         const position = marker.getLatLng();
         setLat(position.lat);
         setLng(position.lng);
+        reverseGeocode(position.lat, position.lng);
       });
 
       // Update state and marker/circle on map click
@@ -289,6 +326,7 @@ export default function LeadFinderClient({
         setLng(clickLng);
         marker.setLatLng(e.latlng);
         circle.setLatLng(e.latlng);
+        reverseGeocode(clickLat, clickLng);
       });
 
       // Save instances
@@ -342,6 +380,10 @@ export default function LeadFinderClient({
 
   // Geocode region text to map coordinates
   useEffect(() => {
+    if (isMapClickRef.current) {
+      isMapClickRef.current = false;
+      return;
+    }
     if (!region || region.trim().length < 3) return;
 
     const delayDebounceFn = setTimeout(async () => {
