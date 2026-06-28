@@ -204,3 +204,263 @@ h3 {
 .animate-slide-in-right {
   animation: slide-in-right 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
+
+/* Dark Mode Theme Variables and Overrides */
+.dark {
+  --background: #081225;
+  --foreground: #e2ecff;
+  
+  --card: #0e1e38;
+  --card-foreground: #e2ecff;
+  
+  --popover: #0e1e38;
+  --popover-foreground: #e2ecff;
+  
+  --primary: #3b82f6;
+  --primary-foreground: #ffffff;
+  
+  --secondary: #172a45;
+  --secondary-foreground: #60a5fa;
+  
+  --muted: #172a45;
+  --muted-foreground: #94a3b8;
+  
+  --accent: #1c2d4a;
+  --accent-foreground: #ffffff;
+  
+  --destructive: #f43f5e;
+  --destructive-foreground: #ffffff;
+  
+  --border: #1e2e4d;
+  --input: #1e2e4d;
+  --ring: #3b82f6;
+
+  /* Custom overrides for components using hardcoded hex codes */
+  
+  /* Background overrides */
+  .bg-white {
+    background-color: var(--card) !important;
+  }
+  .bg-\[\#F7FAFF\], .bg-slate-50, .bg-slate-50\/50, .bg-slate-50\/30 {
+    background-color: var(--background) !important;
+  }
+  .bg-\[\#EAF2FF\] {
+    background-color: var(--secondary) !important;
+  }
+  .bg-slate-100 {
+    background-color: var(--secondary) !important;
+  }
+  .bg-\[\#EAF2FF\]\/50 {
+    background-color: rgba(59, 130, 246, 0.25) !important;
+  }
+  .bg-\[\#EAF2FF\]\/20 {
+    background-color: rgba(96, 165, 250, 0.1) !important;
+  }
+  .bg-white\/70 {
+    background-color: rgba(14, 30, 56, 0.7) !important;
+  }
+  .bg-blue-50\/10 {
+    background-color: rgba(59, 130, 246, 0.08) !important;
+  }
+  .bg-card\/60 {
+    background-color: rgba(14, 30, 56, 0.6) !important;
+  }
+  .glass-card {
+    background-color: rgba(14, 30, 56, 0.65) !important;
+    border-color: rgba(96, 165, 250, 0.1) !important;
+  }
+  
+  /* Sidebar overrides */
+  aside.bg-\[\#002B6A\] {
+    background-color: #061122 !important;
+    border-right-color: var(--border) !important;
+  }
+  
+  /* Text overrides */
+  .text-\[\#002B6A\] {
+    color: #60a5fa !important;
+  }
+  .text-\[\#061A40\] {
+    color: #e2ecff !important;
+  }
+  .text-\[\#475569\] {
+    color: #94a3b8 !important;
+  }
+  .text-\[\#475569\]\/50 {
+    color: rgba(226, 236, 255, 0.5) !important;
+  }
+  .text-\[\#475569\]\/60 {
+    color: rgba(226, 236, 255, 0.6) !important;
+  }
+  .text-\[\#475569\]\/65 {
+    color: rgba(226, 236, 255, 0.65) !important;
+  }
+  .text-\[\#475569\]\/70 {
+    color: rgba(226, 236, 255, 0.7) !important;
+  }
+  .text-\[\#475569\]\/80 {
+    color: rgba(226, 236, 255, 0.8) !important;
+  }
+  .placeholder-\[\#475569\]\/50::placeholder {
+    color: rgba(226, 236, 255, 0.4) !important;
+  }
+  .text-blue-100 {
+    color: #a5b4fc !important;
+  }
+  .text-blue-200 {
+    color: #64748b !important;
+  }
+  .text-slate-400 {
+    color: #64748b !important;
+  }
+
+  /* Hover and active states */
+  .hover\:bg-\[\#EAF2FF\]:hover, .hover\:bg-slate-50:hover, .hover\:bg-\[\#F7FAFF\]:hover, .hover\:bg-\[\#d8e8ff\]:hover, .hover\:bg-slate-50\/50:hover {
+    background-color: var(--accent) !important;
+  }
+  .hover\:bg-violet-50\/50:hover {
+    background-color: rgba(139, 92, 246, 0.15) !important;
+  }
+  .hover\:bg-rose-50:hover {
+    background-color: rgba(244, 63, 94, 0.15) !important;
+  }
+  .hover\:text-\[\#002B6A\]:hover {
+    color: #ffffff !important;
+  }
+  .hover\:bg-\[\#061A40\]\/30:hover {
+    background-color: rgba(30, 41, 59, 0.5) !important;
+  }
+  .bg-\[\#061A40\]\/50 {
+    background-color: rgba(30, 41, 59, 0.8) !important;
+  }
+
+  /* Borders */
+  .border-\[\#D8E0EA\], .border-border, .border-slate-100, .border-slate-200, .border-slate-200\/50, .border-dashed {
+    border-color: var(--border) !important;
+  }
+  .border-b, .border-t, .border-l, .border-r, .border {
+    border-color: var(--border) !important;
+  }
+  hr {
+    border-color: var(--border) !important;
+  }
+
+  /* CRM Status Colors Overrides */
+  .bg-blue-50 {
+    background-color: rgba(59, 130, 246, 0.15) !important;
+  }
+  .text-blue-700 {
+    color: #60a5fa !important;
+  }
+  .border-blue-100 {
+    border-color: rgba(59, 130, 246, 0.3) !important;
+  }
+  
+  .bg-purple-50 {
+    background-color: rgba(168, 85, 247, 0.15) !important;
+  }
+  .text-purple-700 {
+    color: #c084fc !important;
+  }
+  .border-purple-100 {
+    border-color: rgba(168, 85, 247, 0.3) !important;
+  }
+  
+  .bg-amber-50 {
+    background-color: rgba(245, 158, 11, 0.15) !important;
+  }
+  .text-amber-700 {
+    color: #fbbf24 !important;
+  }
+  .border-amber-100 {
+    border-color: rgba(245, 158, 11, 0.3) !important;
+  }
+  
+  .bg-emerald-50 {
+    background-color: rgba(16, 185, 129, 0.15) !important;
+  }
+  .text-emerald-700 {
+    color: #34d399 !important;
+  }
+  .border-emerald-100 {
+    border-color: rgba(16, 185, 129, 0.3) !important;
+  }
+  
+  .bg-teal-50 {
+    background-color: rgba(20, 184, 166, 0.15) !important;
+  }
+  .text-teal-700 {
+    color: #2dd4bf !important;
+  }
+  .border-teal-100 {
+    border-color: rgba(20, 184, 166, 0.3) !important;
+  }
+  .text-slate-700 {
+    color: #cbd5e1 !important;
+  }
+
+  /* Scrollbar Thumb */
+  ::-webkit-scrollbar-thumb {
+    background: var(--border) !important;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #475569 !important;
+  }
+  
+  /* Input fields */
+  input[type="text"], input[type="email"], input[type="password"], select, textarea {
+    background-color: var(--background) !important;
+    border-color: var(--border) !important;
+    color: var(--foreground) !important;
+  }
+  textarea:disabled {
+    background-color: var(--background) !important;
+    opacity: 0.6;
+  }
+  
+  /* Unread dot white ring override */
+  .ring-white {
+    box-shadow: 0 0 0 4px var(--card) !important;
+  }
+  
+  /* Static clouds color in dark mode */
+  .cloud-static {
+    background: #1e2e4d !important;
+    box-shadow: 0 6px 20px 0 rgba(0, 0, 0, 0.4) !important;
+  }
+  .cloud-static::after, .cloud-static::before {
+    background: #1e2e4d !important;
+  }
+
+  /* Custom Inbox Dark Mode Overrides */
+  .inbox-tabs-container {
+    background-color: var(--secondary) !important;
+    border-color: var(--border) !important;
+  }
+  .inbox-tab-btn-active {
+    background-color: #1e2e4d !important;
+    color: #60a5fa !important;
+  }
+  .inbox-tab-btn-inactive {
+    color: #94a3b8 !important;
+  }
+  .inbox-tab-btn-inactive:hover {
+    color: #ffffff !important;
+  }
+  .inbox-delete-btn {
+    background-color: rgba(244, 63, 94, 0.15) !important;
+    border-color: rgba(244, 63, 94, 0.3) !important;
+    color: #fb7185 !important;
+  }
+  .inbox-delete-btn:hover {
+    background-color: rgba(244, 63, 94, 0.25) !important;
+  }
+  .inbox-outbound-card {
+    background-color: var(--card) !important;
+    border-color: var(--border) !important;
+  }
+  .inbox-inbound-card {
+    background-color: rgba(96, 165, 250, 0.1) !important;
+    border-color: rgba(96, 165, 250, 0.25) !important;
+  }
+}

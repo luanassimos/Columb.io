@@ -140,29 +140,6 @@ export default function TemplatesClient({ templates, role }: TemplatesClientProp
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex justify-between items-start">
-        <div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-[#002B6A]">Templates</h1>
-          <p className="text-sm text-[#475569] mt-1">
-            Create reusable email copy templates with dynamic variables.
-          </p>
-        </div>
-        {canEditTemplates && (
-          <button
-            type="button"
-            onClick={() => {
-              setTemplateToEdit(null);
-              setIsModalOpen(true);
-            }}
-            className="flex items-center gap-2 px-4 py-2 bg-[#2D6BFF] hover:bg-[#1b58ec] text-white rounded-lg text-sm font-semibold transition-all shadow-sm shadow-[#2D6BFF]/30"
-          >
-            <Plus className="h-4 w-4" />
-            Create Template
-          </button>
-        )}
-      </div>
-
       {templates.length === 0 ? (
         /* Empty State */
         <div className="glass-card rounded-2xl border border-[#D8E0EA] text-center py-32 max-w-xl mx-auto space-y-4">
@@ -236,11 +213,26 @@ export default function TemplatesClient({ templates, role }: TemplatesClientProp
               />
             </div>
 
-            {selectedIds.size > 0 && (
-              <span className="text-xs text-[#475569] font-semibold bg-[#EAF2FF] px-2.5 py-1 rounded-full border border-[#2D6BFF]/20">
-                {selectedIds.size} selected
-              </span>
-            )}
+            <div className="flex items-center gap-3">
+              {selectedIds.size > 0 && (
+                <span className="text-xs text-[#475569] font-semibold bg-[#EAF2FF] px-2.5 py-1 rounded-full border border-[#2D6BFF]/20">
+                  {selectedIds.size} selected
+                </span>
+              )}
+              {canEditTemplates && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTemplateToEdit(null);
+                    setIsModalOpen(true);
+                  }}
+                  className="flex items-center gap-2 px-3.5 py-1.5 bg-[#2D6BFF] hover:bg-[#1b58ec] text-white rounded-lg text-xs font-semibold transition-all shadow-sm shadow-[#2D6BFF]/30 cursor-pointer"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Create Template
+                </button>
+              )}
+            </div>
           </div>
 
           {bulkError && (
