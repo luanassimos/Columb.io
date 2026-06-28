@@ -237,13 +237,7 @@ export default function ContactsClient({ contacts, role }: ContactsClientProps) 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-start">
-        <div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-[#002B6A]">Leads</h1>
-          <p className="text-sm text-[#475569] mt-1">
-            Manage your leads, segment by tags, and import customer databases.
-          </p>
-        </div>
+      <div className="flex justify-end items-start">
         <div className="flex gap-2">
           <button
             type="button"

@@ -4,13 +4,7 @@ import { Bell } from 'lucide-react';
 export default function NotificationsPage() {
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-3xl font-extrabold tracking-tight">Notifications</h1>
-        <p className="text-sm text-zinc-400 mt-1">
-          Stay updated with campaign statuses, customer responses, and email delivery reports.
-        </p>
-      </div>
+
 
       {/* Empty State */}
       <div className="glass-card rounded-2xl border border-zinc-800 p-12 text-center py-32 max-w-xl mx-auto space-y-4">

@@ -283,14 +283,14 @@ export default function InboxClient({
           {/* List Toolbar */}
           <div className="p-4 border-b border-[#D8E0EA] space-y-3 shrink-0 bg-slate-50/50">
             {/* Tabs Selector */}
-            <div className="flex gap-1 p-0.5 bg-slate-100 rounded-lg border border-slate-200/50 text-[11px] font-bold">
+            <div className="flex gap-1 p-0.5 bg-slate-100 rounded-lg border border-slate-200/50 text-[11px] font-bold inbox-tabs-container">
               <button
                 type="button"
                 onClick={() => handleTabChange('received')}
                 className={`flex-1 py-1.5 rounded-md text-center transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                   activeTab === 'received'
-                    ? 'bg-white text-[#002B6A] shadow-sm font-extrabold'
-                    : 'text-[#475569]/80 hover:text-[#002B6A]'
+                    ? 'bg-white text-[#002B6A] shadow-sm font-extrabold inbox-tab-btn-active'
+                    : 'text-[#475569]/80 hover:text-[#002B6A] inbox-tab-btn-inactive'
                 }`}
               >
                 <Inbox className="h-3.5 w-3.5" />
@@ -301,8 +301,8 @@ export default function InboxClient({
                 onClick={() => handleTabChange('sent')}
                 className={`flex-1 py-1.5 rounded-md text-center transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                   activeTab === 'sent'
-                    ? 'bg-white text-[#002B6A] shadow-sm font-extrabold'
-                    : 'text-[#475569]/80 hover:text-[#002B6A]'
+                    ? 'bg-white text-[#002B6A] shadow-sm font-extrabold inbox-tab-btn-active'
+                    : 'text-[#475569]/80 hover:text-[#002B6A] inbox-tab-btn-inactive'
                 }`}
               >
                 <Send className="h-3.5 w-3.5" />
@@ -323,7 +323,7 @@ export default function InboxClient({
             </div>
             {/* Quick Filters (Received tab only) */}
             {activeTab === 'received' && (
-              <div className="flex gap-1.5 p-0.5 bg-slate-100 rounded-lg border border-slate-200/50 text-[11px] font-semibold">
+              <div className="flex gap-1.5 p-0.5 bg-slate-100 rounded-lg border border-slate-200/50 text-[11px] font-semibold inbox-tabs-container">
                 {(['all', 'unread', 'read'] as const).map(f => (
                   <button
                     key={f}
@@ -331,8 +331,8 @@ export default function InboxClient({
                     onClick={() => setFilter(f)}
                     className={`flex-1 py-1 rounded-md text-center transition-all cursor-pointer ${
                       filter === f
-                        ? 'bg-white text-[#002B6A] shadow-sm font-bold'
-                        : 'text-[#475569]/80 hover:text-[#002B6A]'
+                        ? 'bg-white text-[#002B6A] shadow-sm font-bold inbox-tab-btn-active'
+                        : 'text-[#475569]/80 hover:text-[#002B6A] inbox-tab-btn-inactive'
                     }`}
                   >
                     {f === 'all' ? 'Todas' : f === 'unread' ? 'Não Lidas' : 'Lidas'}
@@ -343,7 +343,7 @@ export default function InboxClient({
           </div>
 
           {/* List Container */}
-          <div className="flex-1 overflow-y-auto divide-y divide-[#D8E0EA]/75 min-h-0">
+          <div className="flex-1 overflow-y-auto divide-y divide-[#D8E0EA]/75 min-h-0 inbox-list-container">
             {activeTab === 'received' ? (
               filteredReplies.length === 0 ? (
                 <div className="p-12 text-center space-y-3">
@@ -565,7 +565,7 @@ export default function InboxClient({
                     <button
                       type="button"
                       onClick={() => handleDeleteConversation(selectedReply.id)}
-                      className="p-2 border border-rose-100 bg-rose-50 hover:bg-rose-100 rounded-lg text-rose-600 transition-all cursor-pointer shadow-sm"
+                      className="p-2 border border-rose-100 bg-rose-50 hover:bg-rose-100 rounded-lg text-rose-600 transition-all cursor-pointer shadow-sm inbox-delete-btn"
                       title="Excluir da Caixa de Entrada"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -579,7 +579,7 @@ export default function InboxClient({
                 <>
                   <div className="flex-1 overflow-y-auto p-6 space-y-6 min-h-0 bg-slate-50/50">
                     {/* Outbound Email placeholder to show context */}
-                    <div className="bg-white border border-[#D8E0EA]/75 rounded-2xl p-5 space-y-3 shadow-xs max-w-2xl mx-auto">
+                    <div className="bg-white border border-[#D8E0EA]/75 rounded-2xl p-5 space-y-3 shadow-xs max-w-2xl mx-auto inbox-outbound-card">
                       <div className="flex justify-between items-start">
                         <div>
                           <div className="text-xs font-bold text-[#475569] flex items-center gap-1.5">
@@ -600,7 +600,7 @@ export default function InboxClient({
                     </div>
 
                     {/* Inbound Lead Reply Bubble */}
-                    <div className="bg-[#EAF2FF]/20 border border-[#2D6BFF]/15 rounded-2xl p-5 space-y-3 shadow-xs max-w-2xl mx-auto border-l-4 border-l-[#2D6BFF]">
+                    <div className="bg-[#EAF2FF]/20 border border-[#2D6BFF]/15 rounded-2xl p-5 space-y-3 shadow-xs max-w-2xl mx-auto border-l-4 border-l-[#2D6BFF] inbox-inbound-card">
                       <div className="flex justify-between items-start">
                         <div>
                           <div className="text-xs font-bold text-[#002B6A] flex items-center gap-1.5">
@@ -662,7 +662,7 @@ export default function InboxClient({
                   }
                   return (
                     <div className="flex-1 overflow-y-auto p-6 space-y-6 min-h-0 bg-slate-50/50">
-                      <div className="bg-white border border-[#D8E0EA]/75 rounded-2xl p-5 space-y-3 shadow-xs max-w-2xl mx-auto border-l-4 border-l-emerald-500">
+                      <div className="bg-white border border-[#D8E0EA]/75 rounded-2xl p-5 space-y-3 shadow-xs max-w-2xl mx-auto border-l-4 border-l-emerald-500 inbox-outbound-card">
                         <div className="flex justify-between items-start">
                           <div>
                             <div className="text-xs font-bold text-[#002B6A] flex items-center gap-1.5">
