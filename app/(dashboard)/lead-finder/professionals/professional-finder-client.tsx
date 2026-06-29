@@ -100,17 +100,8 @@ export default function ProfessionalFinderClient({
     cat.toLowerCase().includes(category.toLowerCase())
   );
 
-  // Advanced Geotargeted states
-  const [lat, setLat] = useState(-22.9068); // Default Rio de Janeiro
-  const [lng, setLng] = useState(-43.1729);
-  const [radius, setRadius] = useState(5000); // 5km in meters
-
-  // Map instances states
-  const [mapInstance, setMapInstance] = useState<any>(null);
-  const [markerInstance, setMarkerInstance] = useState<any>(null);
-  const [circleInstance, setCircleInstance] = useState<any>(null);
-  const mapContainerRef = useRef<HTMLDivElement>(null);
-  const isMapClickRef = useRef(false);
+  // Semantic targeting precision state
+  const [precision, setPrecision] = useState<'city' | 'state' | 'country'>('city');
 
   // Selection states
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -135,6 +126,29 @@ export default function ProfessionalFinderClient({
   const [showFormOverride, setShowFormOverride] = useState(false);
 
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Advanced Geotargeted states (only for filling region and showing region on map)
+  const [lat, setLat] = useState(-22.9068); // Default Rio de Janeiro
+  const [lng, setLng] = useState(-43.1729);
+
+  // Map instances states
+  const [mapInstance, setMapInstance] = useState<any>(null);
+  const [markerInstance, setMarkerInstance] = useState<any>(null);
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const isMapClickRef = useRef(false);
+
+  // Close category dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsCategoryDropdownOpen(false);
+      }
+    }
+    document.addEventListener('click', handleClickOutside, true);
+    return () => {
+      document.removeEventListener('click', handleClickOutside, true);
+    };
+  }, []);
 
   const isJobActive = latestJob && (latestJob.status === 'pending' || latestJob.status === 'running');
   const isJobFinished = latestJob && (latestJob.status === 'completed' || latestJob.status === 'failed' || latestJob.status === 'cancelled');
@@ -166,7 +180,6 @@ export default function ProfessionalFinderClient({
     let active = true;
     let map: any = null;
     let marker: any = null;
-    let circle: any = null;
 
     // Load Leaflet dynamically to avoid SSR errors
     import('leaflet').then((L) => {
@@ -188,15 +201,8 @@ export default function ProfessionalFinderClient({
         attribution: '© OpenStreetMap contributors',
       }).addTo(map);
 
-      // Create marker and circle
+      // Create marker (draggable to set region)
       marker = L.marker([lat, lng], { draggable: true }).addTo(map);
-      circle = L.circle([lat, lng], {
-        radius: radius,
-        color: '#2D6BFF',
-        fillColor: '#2D6BFF',
-        fillOpacity: 0.15,
-        weight: 1.5,
-      }).addTo(map);
 
       const reverseGeocode = async (latitude: number, longitude: number) => {
         try {
@@ -241,20 +247,18 @@ export default function ProfessionalFinderClient({
         reverseGeocode(position.lat, position.lng);
       });
 
-      // Update state and marker/circle on map click
+      // Update state and marker on map click
       map.on('click', (e: any) => {
         const { lat: clickLat, lng: clickLng } = e.latlng;
         setLat(clickLat);
         setLng(clickLng);
         marker.setLatLng(e.latlng);
-        circle.setLatLng(e.latlng);
         reverseGeocode(clickLat, clickLng);
       });
 
       // Save instances
       setMapInstance(map);
       setMarkerInstance(marker);
-      setCircleInstance(circle);
     });
 
     return () => {
@@ -264,7 +268,6 @@ export default function ProfessionalFinderClient({
       }
       setMapInstance(null);
       setMarkerInstance(null);
-      setCircleInstance(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentStage]);
@@ -280,15 +283,6 @@ export default function ProfessionalFinderClient({
           markerInstance.setLatLng([lat, lng]);
         }
       }
-      if (circleInstance) {
-        const currentPos = circleInstance.getLatLng();
-        if (currentPos.lat !== lat || currentPos.lng !== lng) {
-          circleInstance.setLatLng([lat, lng]);
-        }
-        if (circleInstance.getRadius() !== radius) {
-          circleInstance.setRadius(radius);
-        }
-      }
       
       // Smoothly pan map to new coordinates
       const mapCenter = mapInstance.getCenter();
@@ -298,7 +292,7 @@ export default function ProfessionalFinderClient({
     } catch (err) {
       console.warn('Erro ao sincronizar Leaflet:', err);
     }
-  }, [lat, lng, radius, mapInstance, markerInstance, circleInstance]);
+  }, [lat, lng, mapInstance, markerInstance]);
 
   // Geocode region text to map coordinates
   useEffect(() => {
@@ -321,19 +315,18 @@ export default function ProfessionalFinderClient({
             const newLng = parseFloat(first.lon);
             setLat(newLat);
             setLng(newLng);
-            
-            if (mapInstance) {
-              mapInstance.setView([newLat, newLng], 12);
-            }
           }
         }
       } catch (err) {
-        console.error('Erro ao geocodificar região:', err);
+        console.error('Erro na geocodificação da região:', err);
       }
     }, 1200);
 
     return () => clearTimeout(delayDebounceFn);
-  }, [region, mapInstance]);
+  }, [region]);
+
+
+
 
   // Polling for pending or running jobs
   useEffect(() => {
@@ -386,7 +379,12 @@ export default function ProfessionalFinderClient({
     setImportError(null);
 
     if (!category.trim()) {
-      setFormError('Por favor, preencha a Área de Atuação ou Cargo.');
+      setFormError('Por favor, preencha a Área Profissional.');
+      return;
+    }
+
+    if (!region.trim()) {
+      setFormError('Por favor, preencha a Região.');
       return;
     }
 
@@ -394,12 +392,9 @@ export default function ProfessionalFinderClient({
     const result = await createLeadJob({
       category: category.trim(),
       region: region.trim() || undefined,
-      keywords: keywords.trim() || undefined,
+      keywords: precision,
       limitCount,
       leadEntityType: 'professional',
-      lat: lat,
-      lng: lng,
-      radius: radius,
     });
     setIsSubmitting(false);
 
@@ -408,7 +403,6 @@ export default function ProfessionalFinderClient({
     } else {
       setCategory('');
       setRegion('');
-      setKeywords('');
       setShowFormOverride(false);
       try {
         const response = await fetch('/api/lead-finder/status');
@@ -690,18 +684,19 @@ export default function ProfessionalFinderClient({
       {/* Main Flow Container */}
       <div className="transition-all duration-300">
         {currentStage === 'form' && (
-          <div className="bg-white rounded-2xl border border-[#D8E0EA] p-6 shadow-sm">
-            <h3 className="text-base font-bold text-[#002B6A] mb-4 flex items-center gap-2">
+          <div className="bg-white rounded-2xl border border-[#D8E0EA] p-6 shadow-sm max-w-4xl mx-auto">
+            <h3 className="text-base font-bold text-[#002B6A] mb-6 flex items-center gap-2 border-b border-[#D8E0EA] pb-3">
               <Sparkles className="h-4.5 w-4.5 text-[#2D6BFF]" />
-              Iniciar Captura de Oportunidades
+              Iniciar Captura de Perfis Profissionais
             </h3>
 
             <form onSubmit={handleStartCapture} className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Left Column: Form Fields */}
-              <div className="space-y-4">
+              <div className="space-y-5">
+                {/* Área Profissional */}
                 <div className="space-y-1.5 relative" ref={dropdownRef}>
                   <div className="flex justify-between items-center">
-                    <label className="text-xs font-semibold text-[#002B6A]">Área de Atuação ou Cargo</label>
+                    <label className="text-xs font-semibold text-[#002B6A]">Área Profissional</label>
                     <div className="flex gap-1.5">
                       <button
                         type="button"
@@ -741,8 +736,8 @@ export default function ProfessionalFinderClient({
                       setIsCategoryDropdownOpen(true);
                     }}
                     onFocus={() => setIsCategoryDropdownOpen(true)}
-                    placeholder="ex: Personal Trainer, Nutricionista, Designer"
-                    className="w-full px-3.5 py-2.5 rounded-lg border border-[#D8E0EA] bg-[#F7FAFF] text-sm text-[#061A40] focus:outline-none focus:border-[#2D6BFF] focus:bg-white transition-all"
+                    placeholder="ex: Dentist, Software Developer"
+                    className="w-full px-3.5 py-2.5 rounded-lg border border-[#D8E0EA] bg-[#F7FAFF] text-sm text-[#061A40] focus:outline-none focus:border-[#2D6BFF] focus:bg-white transition-all font-medium"
                   />
                   
                   {isCategoryDropdownOpen && filteredRoles.length > 0 && (
@@ -755,7 +750,7 @@ export default function ProfessionalFinderClient({
                             setCategory(cat);
                             setIsCategoryDropdownOpen(false);
                           }}
-                          className="w-full text-left px-4 py-2 text-xs text-[#061A40] hover:bg-[#EAF2FF] hover:text-[#002B6A] transition-colors font-medium cursor-pointer"
+                          className="w-full text-left px-4 py-2 text-xs text-[#061A40] hover:bg-[#EAF2FF] hover:text-[#002B6A] transition-colors font-semibold cursor-pointer"
                         >
                           {cat}
                         </button>
@@ -764,86 +759,79 @@ export default function ProfessionalFinderClient({
                   )}
                 </div>
 
+                {/* Região */}
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-[#002B6A]">Cidade ou Região (Opcional)</label>
+                  <label className="text-xs font-semibold text-[#002B6A]">Região</label>
                   <input
                     type="text"
                     value={region}
                     onChange={(e) => setRegion(e.target.value)}
-                    placeholder="ex: São Paulo, Rio de Janeiro, San Francisco"
-                    className="w-full px-3.5 py-2.5 rounded-lg border border-[#D8E0EA] bg-[#F7FAFF] text-sm text-[#061A40] focus:outline-none focus:border-[#2D6BFF] focus:bg-white transition-all"
+                    placeholder="ex: Miami, California, USA"
+                    className="w-full px-3.5 py-2.5 rounded-lg border border-[#D8E0EA] bg-[#F7FAFF] text-sm text-[#061A40] focus:outline-none focus:border-[#2D6BFF] focus:bg-white transition-all font-medium"
                   />
                   <p className="text-[10px] text-[#475569]/70">
                     O mapa à direita irá se mover automaticamente ao preencher este campo.
                   </p>
                 </div>
 
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-[#002B6A]">Palavras-chave Extras (Opcional)</label>
-                  <input
-                    type="text"
-                    value={keywords}
-                    onChange={(e) => setKeywords(e.target.value)}
-                    placeholder="ex: pilates, musculação, crossfit"
-                    className="w-full px-3.5 py-2.5 rounded-lg border border-[#D8E0EA] bg-[#F7FAFF] text-sm text-[#061A40] focus:outline-none focus:border-[#2D6BFF] focus:bg-white transition-all"
-                  />
-                </div>
+                {/* Grid: Precisão e Quantidade Máxima */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Precisão */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-[#002B6A]">Precisão</label>
+                    <select
+                      value={precision}
+                      onChange={(e) => setPrecision(e.target.value as any)}
+                      className="w-full px-3 py-2.5 text-xs rounded-lg border border-[#D8E0EA] bg-[#F7FAFF] text-[#061A40] focus:outline-none focus:border-[#2D6BFF] focus:bg-white transition-all font-semibold cursor-pointer"
+                    >
+                      <option value="city">Cidade</option>
+                      <option value="state">Estado</option>
+                      <option value="country">País</option>
+                    </select>
+                  </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                  {/* Quantidade Máxima */}
                   <div className="space-y-1.5">
                     <label className="text-xs font-semibold text-[#002B6A]">Quantidade Máxima</label>
                     <select
                       value={limitCount}
                       onChange={(e) => setLimitCount(Number(e.target.value))}
-                      className="w-full px-3 py-2 text-xs rounded-lg border border-[#D8E0EA] bg-[#F7FAFF] text-[#061A40] focus:outline-none focus:border-[#2D6BFF] focus:bg-white transition-all"
+                      className="w-full px-3 py-2.5 text-xs rounded-lg border border-[#D8E0EA] bg-[#F7FAFF] text-[#061A40] focus:outline-none focus:border-[#2D6BFF] focus:bg-white transition-all font-semibold cursor-pointer"
                     >
+                      <option value={5}>5 perfis</option>
                       <option value={10}>10 perfis</option>
                       <option value={20}>20 perfis</option>
                       <option value={50}>50 perfis</option>
                     </select>
                   </div>
-                  
-                  <div className="space-y-1.5">
-                    <div className="flex justify-between text-xs font-semibold text-[#002B6A]">
-                      <span>Raio de Busca</span>
-                      <span className="text-[#2D6BFF] font-bold">{(radius / 1000).toFixed(0)} km</span>
-                    </div>
-                    <input
-                      type="range"
-                      min="1000"
-                      max="20000"
-                      step="1000"
-                      value={radius}
-                      onChange={(e) => setRadius(Number(e.target.value))}
-                      className="w-full h-1 mt-2.5 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-[#2D6BFF]"
-                    />
-                  </div>
                 </div>
 
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="w-full py-2.5 rounded-lg text-sm font-semibold text-white bg-[#2D6BFF] hover:bg-[#1b58ec] disabled:bg-slate-200 transition-all flex items-center justify-center gap-2 shadow-sm cursor-pointer"
-                >
-                  {isSubmitting ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Sparkles className="h-4 w-4" />
-                  )}
-                  Buscar Profissionais
-                </button>
+                <div className="pt-2">
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="w-full py-2.5 rounded-lg text-sm font-semibold text-white bg-[#2D6BFF] hover:bg-[#1b58ec] disabled:bg-slate-200 transition-all flex items-center justify-center gap-2 shadow-sm cursor-pointer"
+                  >
+                    {isSubmitting ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Sparkles className="h-4 w-4" />
+                    )}
+                    Buscar Oportunidades
+                  </button>
+                </div>
 
                 {formError && (
                   <div className="p-3 bg-rose-50 border border-rose-200 text-xs text-rose-600 font-medium rounded-lg flex items-center gap-2">
-                    <AlertCircle className="h-4 w-4" />
+                    <AlertCircle className="h-4 w-4 shrink-0" />
                     <span>{formError}</span>
                   </div>
                 )}
               </div>
 
               {/* Right Column: Map */}
-              <div className="space-y-1.5 flex flex-col h-full">
-                <div className="flex justify-between items-center shrink-0">
+              <div className="space-y-1.5 flex flex-col justify-between">
+                <div className="flex justify-between items-center">
                   <label className="text-xs font-semibold text-[#002B6A]">Área Geográfica Selecionada</label>
                   <span className="text-[10px] text-[#475569]/80 font-mono bg-slate-100 px-2 py-0.5 rounded">
                     {lat.toFixed(4)}, {lng.toFixed(4)}
@@ -851,7 +839,7 @@ export default function ProfessionalFinderClient({
                 </div>
                 <div 
                   ref={mapContainerRef} 
-                  className="w-full flex-1 min-h-[220px] rounded-2xl border border-[#D8E0EA] bg-slate-50 overflow-hidden z-10" 
+                  className="w-full aspect-square md:h-[280px] md:aspect-auto rounded-2xl border border-[#D8E0EA] bg-slate-50 overflow-hidden z-10" 
                 />
               </div>
             </form>

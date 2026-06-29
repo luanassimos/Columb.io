@@ -4,6 +4,7 @@
  * Re-exports the lead scraper loop so it can be bootstrapped by instrumentation.ts
  */
 import { createClient } from '@supabase/supabase-js';
+import ws from 'ws';
 import { calculateLeadScore } from '@/lib/lead-scoring';
 import { captureCompanyLeads, captureProfessionalLeads } from '../lead-services';
 
@@ -12,6 +13,7 @@ function getSupabase() {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY!;
   return createClient(url, key, {
     auth: { persistSession: false, autoRefreshToken: false },
+    realtime: { transport: ws },
   });
 }
 
@@ -64,6 +66,14 @@ async function processQueue() {
               return true; // Already exists
             }
 
+            // Log Stage 4 before insert
+            console.log(`SAVING_RECORD
+
+NAME: ${lead.display_name}
+COUNTRY: ${lead.country || 'Unknown'}
+URL: ${lead.profile_url}
+SOURCE: linkedin`);
+
             // Insert parent lead record
             const { data: parentLead, error: insertParentErr } = await supabase
               .from('leads')
@@ -104,6 +114,7 @@ async function processQueue() {
 
             if (!insertChildErr) {
               leadsSaved++;
+              console.log('SAVE_SUCCESS');
               await supabase
                 .from('lead_finder_jobs')
                 .update({ progress_count: leadsSaved, updated_at: new Date().toISOString() })

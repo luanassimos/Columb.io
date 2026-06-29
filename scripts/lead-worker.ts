@@ -6,6 +6,7 @@
 import { createClient } from '@supabase/supabase-js';
 import * as fs from 'fs';
 import * as path from 'path';
+import ws from 'ws';
 import { calculateLeadScore } from '../lib/lead-scoring';
 import { captureCompanyLeads, captureProfessionalLeads } from '../lib/lead-services';
 
@@ -46,6 +47,7 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey, {
     persistSession: false,
     autoRefreshToken: false,
   },
+  realtime: { transport: ws },
 });
 
 console.log('WORKER_LEADS_STARTED');
@@ -95,6 +97,14 @@ async function processQueue() {
 
             if (existing) return true;
 
+            // Log Stage 4 before insert
+            console.log(`SAVING_RECORD
+
+NAME: ${lead.display_name}
+COUNTRY: ${lead.country || 'Unknown'}
+URL: ${lead.profile_url}
+SOURCE: linkedin`);
+
             // Insert parent record
             const { data: parentLead, error: insertParentErr } = await supabase
               .from('leads')
@@ -135,6 +145,7 @@ async function processQueue() {
 
             if (!insertChildErr) {
               leadsSaved++;
+              console.log('SAVE_SUCCESS');
               await supabase
                 .from('lead_finder_jobs')
                 .update({ progress_count: leadsSaved, updated_at: new Date().toISOString() })
