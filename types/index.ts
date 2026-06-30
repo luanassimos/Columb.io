@@ -277,3 +277,53 @@ export interface SmtpSettings {
   from_name: string;
   created_at?: string;
 }
+
+export type InboxChannel = 'whatsapp' | 'email' | 'instagram' | 'telegram' | 'messenger';
+export type ConversationStatus = 'active' | 'closed' | 'blocked';
+
+export interface Conversation {
+  id: string;
+  workspace_id: string;
+  channel: InboxChannel;
+  external_id?: string | null;
+  title: string;
+  avatar_url?: string | null;
+  last_message_preview?: string | null;
+  unread_count: number;
+  status: ConversationStatus;
+  archived: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export type SenderType = 'customer' | 'agent' | 'ai' | 'system';
+export type MessageDirection = 'inbound' | 'outbound';
+export type MessageStatus = 'pending' | 'sent' | 'delivered' | 'read' | 'failed';
+
+export interface Message {
+  id: string;
+  conversation_id: string;
+  external_message_id?: string | null;
+  sender_type: SenderType;
+  direction: MessageDirection;
+  body?: string | null;
+  attachment_url?: string | null;
+  attachment_type?: string | null;
+  status: MessageStatus;
+  sent_at?: string | null;
+  delivered_at?: string | null;
+  read_at?: string | null;
+  created_at: string;
+}
+
+export interface ChannelConnection {
+  id: string;
+  workspace_id: string;
+  channel: InboxChannel;
+  account_name: string;
+  external_account_id?: string | null;
+  connected: boolean;
+  metadata: Record<string, any>;
+  created_at: string;
+  updated_at: string;
+}

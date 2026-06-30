@@ -16,7 +16,7 @@ async function main() {
   });
   const page = await context.newPage();
 
-  let apiChIJCount = 0;
+  const apiChIJCount = 0;
   const apiPlaceIds = new Set<string>();
 
   page.on('response', async (response) => {
