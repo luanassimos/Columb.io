@@ -13,7 +13,7 @@ function getSupabase() {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY!;
   return createClient(url, key, {
     auth: { persistSession: false, autoRefreshToken: false },
-    realtime: { transport: ws },
+    realtime: { transport: ws as any },
   });
 }
 

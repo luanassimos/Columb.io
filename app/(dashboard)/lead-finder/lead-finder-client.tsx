@@ -14,13 +14,11 @@ import {
   Globe,
   MapPin,
   Phone,
-  Terminal,
   ChevronDown,
   ChevronsUpDown,
   ChevronUp,
   X,
   Trash2,
-  Info,
   MessageCircle,
   Mail,
   FileText,
@@ -166,7 +164,6 @@ export default function LeadFinderClient({
   const [activeLead, setActiveLead] = useState<Lead | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showFormOverride, setShowFormOverride] = useState(false);
-  const [showTerminalInfo, setShowTerminalInfo] = useState(false);
 
   // Pigeon search animation state (2 frames)
   const [pigeonFrame, setPigeonFrame] = useState(1);

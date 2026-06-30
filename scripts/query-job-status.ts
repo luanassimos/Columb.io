@@ -28,7 +28,7 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 const supabase = createClient(supabaseUrl!, supabaseServiceKey!, {
   auth: { persistSession: false, autoRefreshToken: false },
-  realtime: { transport: ws },
+  realtime: { transport: ws as any },
 });
 
 async function main() {

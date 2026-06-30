@@ -21,7 +21,8 @@ import {
   Building,
   Briefcase,
   ChevronUp,
-  ChevronDown
+  ChevronDown,
+  MessageCircle
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -36,10 +37,20 @@ export default function Sidebar({ profileName, userEmail, mobileOpen, onClose }:
   const pathname = usePathname();
 
   const [isCaptarLeadsOpen, setIsCaptarLeadsOpen] = useState(pathname.startsWith('/lead-finder'));
+  const [isInboxOpen, setIsInboxOpen] = useState(pathname.startsWith('/inbox'));
 
   const mainNavItems = [
     { label: 'Dashboard', icon: LayoutDashboard, href: '/dashboard' },
-    { label: 'Inbox', icon: Inbox, href: '/inbox' },
+    {
+      label: 'Inbox',
+      icon: Inbox,
+      href: '/inbox',
+      isDropdown: true,
+      subItems: [
+        { label: 'E-mail', icon: Mail, href: '/inbox' },
+        { label: 'WhatsApp', icon: MessageCircle, href: '/inbox/whatsapp' }
+      ]
+    },
     {
       label: 'Captar Leads',
       icon: Target,
@@ -95,12 +106,14 @@ export default function Sidebar({ profileName, userEmail, mobileOpen, onClose }:
           <nav className="p-4 space-y-1">
             {mainNavItems.map((item: any) => {
               if (item.isDropdown) {
-                const isChildActive = pathname.startsWith('/lead-finder');
+                const isChildActive = pathname.startsWith(item.href);
+                const isOpen = item.href === '/lead-finder' ? isCaptarLeadsOpen : isInboxOpen;
+                const setIsOpen = item.href === '/lead-finder' ? setIsCaptarLeadsOpen : setIsInboxOpen;
                 return (
                   <div key={item.href} className="space-y-1">
                     <button
                       type="button"
-                      onClick={() => setIsCaptarLeadsOpen(!isCaptarLeadsOpen)}
+                      onClick={() => setIsOpen(!isOpen)}
                       className={`w-full flex items-center rounded-lg font-medium transition-all duration-205 group h-11 px-3.5 justify-between text-left cursor-pointer ${
                         isCollapsed ? 'justify-center' : 'gap-3 text-sm'
                       } ${
@@ -122,7 +135,7 @@ export default function Sidebar({ profileName, userEmail, mobileOpen, onClose }:
                         )}
                       </div>
                       {!isCollapsed && (
-                        isCaptarLeadsOpen ? (
+                        isOpen ? (
                           <ChevronUp className="h-4 w-4 text-blue-200" />
                         ) : (
                           <ChevronDown className="h-4 w-4 text-blue-200" />
@@ -131,7 +144,7 @@ export default function Sidebar({ profileName, userEmail, mobileOpen, onClose }:
                     </button>
 
                     {/* Sub Menu Items */}
-                    {isCaptarLeadsOpen && !isCollapsed && (
+                    {isOpen && !isCollapsed && (
                       <div className="pl-6 space-y-1 border-l border-blue-900/30 ml-5 animate-fade-in">
                         {item.subItems!.map((subItem: any) => {
                           const isSubActive = pathname === subItem.href;

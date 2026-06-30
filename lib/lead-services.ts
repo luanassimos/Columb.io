@@ -196,7 +196,7 @@ export async function captureCompanyLeads(
           if (isDebug) {
             await page.evaluate(({ href, color }) => {
               const anchor = document.querySelector(`a[href="${href}"]`);
-              const container = anchor?.closest('div[role="article"]') || anchor?.parentElement;
+              const container = (anchor?.closest('div[role="article"]') || anchor?.parentElement) as any;
               if (container) {
                 container.style.border = `3px solid ${color}`;
                 container.style.backgroundColor = 'rgba(255, 255, 0, 0.1)';
@@ -263,7 +263,7 @@ export async function captureCompanyLeads(
           if (isDebug) {
             await page.evaluate(({ href, color }) => {
               const anchor = document.querySelector(`a[href="${href}"]`);
-              const container = anchor?.closest('div[role="article"]') || anchor?.parentElement;
+              const container = (anchor?.closest('div[role="article"]') || anchor?.parentElement) as any;
               if (container) {
                 container.style.border = `3px solid ${color}`;
                 container.style.backgroundColor = 'rgba(255, 255, 0, 0.1)';
@@ -294,7 +294,7 @@ export async function captureCompanyLeads(
           if (isDebug) {
             await page.evaluate(({ href, color }) => {
               const anchor = document.querySelector(`a[href="${href}"]`);
-              const container = anchor?.closest('div[role="article"]') || anchor?.parentElement;
+              const container = (anchor?.closest('div[role="article"]') || anchor?.parentElement) as any;
               if (container) {
                 container.style.border = `3px solid ${color}`;
                 container.style.backgroundColor = 'rgba(0, 255, 0, 0.1)';
@@ -305,7 +305,7 @@ export async function captureCompanyLeads(
           if (isDebug) {
             await page.evaluate(({ href, color }) => {
               const anchor = document.querySelector(`a[href="${href}"]`);
-              const container = anchor?.closest('div[role="article"]') || anchor?.parentElement;
+              const container = (anchor?.closest('div[role="article"]') || anchor?.parentElement) as any;
               if (container) {
                 container.style.border = `3px solid ${color}`;
                 container.style.backgroundColor = 'rgba(255, 255, 0, 0.1)';
@@ -320,7 +320,7 @@ export async function captureCompanyLeads(
         if (isDebug && href) {
           await page.evaluate(({ href, color }) => {
             const anchor = document.querySelector(`a[href="${href}"]`);
-            const container = anchor?.closest('div[role="article"]') || anchor?.parentElement;
+            const container = (anchor?.closest('div[role="article"]') || anchor?.parentElement) as any;
             if (container) {
               container.style.border = `3px solid ${color}`;
               container.style.backgroundColor = 'rgba(255, 0, 0, 0.1)';

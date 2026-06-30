@@ -47,7 +47,7 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey, {
     persistSession: false,
     autoRefreshToken: false,
   },
-  realtime: { transport: ws },
+  realtime: { transport: ws as any },
 });
 
 console.log('WORKER_LEADS_STARTED');
