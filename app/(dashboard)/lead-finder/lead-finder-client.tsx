@@ -23,7 +23,8 @@ import {
   Info,
   MessageCircle,
   Mail,
-  FileText
+  FileText,
+  Award
 } from 'lucide-react';
 import { createLeadJob, importLeadsToContacts, deleteLeads, recalculateLeadsScore } from '@/app/actions/lead-finder';
 import { WorkspaceRole } from '@/lib/permissions';
@@ -262,8 +263,8 @@ export default function LeadFinderClient({
       // Create map instance
       map = L.map(mapContainerRef.current!).setView([lat, lng], 12);
 
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors',
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+        attribution: '© OpenStreetMap contributors, © CartoDB',
       }).addTo(map);
 
       // Create marker and circle
@@ -468,6 +469,11 @@ export default function LeadFinderClient({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const latestJobRef = useRef(latestJob);
+  useEffect(() => {
+    latestJobRef.current = latestJob;
+  }, [latestJob]);
+
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
 
   // Polling for pending or running jobs
@@ -491,14 +497,25 @@ export default function LeadFinderClient({
         if (response.ok) {
           const data = await response.json();
           if (data.success && data.job) {
+            const prevJob = latestJobRef.current;
+            const oldProgress = prevJob?.progress_count || 0;
+            const newProgress = data.job.progress_count || 0;
+            const oldStatus = prevJob?.status;
+            const newStatus = data.job.status;
+
             setLatestJob(data.job);
-            // If status completed or failed, stop polling and refresh data
+
+            // Fetch new leads dynamically during extraction when progress or status updates
+            if (newProgress !== oldProgress || newStatus !== oldStatus) {
+              router.refresh();
+            }
+
+            // If status completed or failed, stop polling
             if (data.job.status !== 'pending' && data.job.status !== 'running') {
               if (pollingRef.current) {
                 clearInterval(pollingRef.current);
                 pollingRef.current = null;
               }
-              router.refresh();
             }
           }
         }
@@ -832,6 +849,10 @@ export default function LeadFinderClient({
           90% { opacity: 1; }
           100% { transform: translateY(96px); opacity: 0; }
         }
+        @keyframes drift {
+          0% { left: -150px; }
+          100% { left: 100%; }
+        }
         .animate-pigeon-float {
           animation: pigeon-float 2s ease-in-out infinite;
         }
@@ -841,29 +862,163 @@ export default function LeadFinderClient({
         .animate-scan-line {
           animation: scan-line 3s ease-in-out infinite;
         }
+        .cloud-css {
+          position: absolute;
+          background: #ffffff;
+          border-radius: 9999px;
+          opacity: 0.85;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05), inset 0 -4px 8px rgba(0, 0, 0, 0.05);
+          filter: blur(1px);
+          pointer-events: none;
+        }
+        .cloud-css::before, .cloud-css::after {
+          content: '';
+          position: absolute;
+          background: #ffffff;
+          border-radius: 50%;
+        }
+        .cloud-css::before {
+          width: 50%;
+          height: 100%;
+          top: -40%;
+          left: 15%;
+        }
+        .cloud-css::after {
+          width: 40%;
+          height: 80%;
+          top: -30%;
+          right: 15%;
+        }
+        .cloud-1 {
+          width: 80px;
+          height: 30px;
+          top: 15%;
+          animation: drift 25s linear infinite;
+        }
+        .cloud-2 {
+          width: 100px;
+          height: 35px;
+          top: 40%;
+          animation: drift 35s linear infinite;
+          animation-delay: 5s;
+          opacity: 0.6;
+        }
+        .cloud-3 {
+          width: 60px;
+          height: 25px;
+          top: 70%;
+          animation: drift 20s linear infinite;
+          animation-delay: 10s;
+          opacity: 0.8;
+        }
       `}</style>
+
+      {/* Dashboard Stats */}
+      {leads.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Card 1: Melhor Lead */}
+          <div className="bg-white p-5 rounded-2xl border border-[#D8E0EA] shadow-sm flex items-center gap-4">
+            <div className="h-12 w-12 rounded-xl bg-indigo-50 text-[#4F46E5] flex items-center justify-center shrink-0">
+              <Award className="h-6 w-6" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <span className="block text-xs font-semibold text-[#475569] uppercase tracking-wider">Melhor Lead</span>
+              <div className="flex items-baseline gap-1.5 min-w-0">
+                <span className="text-base font-extrabold text-[#002B6A] truncate" title={bestLead?.name || 'N/A'}>
+                  {bestLead?.name || 'N/A'}
+                </span>
+                {bestLead && (
+                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded-full shrink-0">
+                    {bestLead.lead_grade}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Card 2: Score Médio de Contato */}
+          <div className="bg-white p-5 rounded-2xl border border-[#D8E0EA] shadow-sm flex items-center gap-4">
+            <div className="h-12 w-12 rounded-xl bg-blue-50 text-[#2D6BFF] flex items-center justify-center shrink-0">
+              <Phone className="h-6 w-6" />
+            </div>
+            <div>
+              <span className="block text-xs font-semibold text-[#475569] uppercase tracking-wider">Score de Contato</span>
+              <div className="text-2xl font-extrabold text-[#002B6A] flex items-center gap-1.5">
+                {averageContactScore}
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                  averageContactScore >= 70 ? 'text-emerald-700 bg-emerald-50 border border-emerald-100' :
+                  averageContactScore >= 40 ? 'text-blue-700 bg-blue-50 border border-blue-100' :
+                  'text-rose-700 bg-rose-50 border border-rose-100'
+                }`}>
+                  {averageContactScore >= 70 ? 'Fácil' : averageContactScore >= 40 ? 'Médio' : 'Difícil'}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Card 3: Leads Sem Canais */}
+          <div className="bg-white p-5 rounded-2xl border border-[#D8E0EA] shadow-sm flex items-center gap-4">
+            <div className="h-12 w-12 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+              <AlertCircle className="h-6 w-6" />
+            </div>
+            <div>
+              <span className="block text-xs font-semibold text-[#475569] uppercase tracking-wider">Sem Canais</span>
+              <div className="text-2xl font-extrabold text-rose-600">
+                {leadsNoChannels} <span className="text-xs text-[#475569] font-normal">/ {totalLeadsCount}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Card 4: Top Leads Acessíveis */}
+          <div className="bg-white p-5 rounded-2xl border border-[#D8E0EA] shadow-sm flex items-center gap-4 relative group">
+            <div className="h-12 w-12 rounded-xl bg-purple-50 text-[#8B5CF6] flex items-center justify-center shrink-0">
+              <Globe className="h-6 w-6" />
+            </div>
+            <div className="flex-1">
+              <span className="block text-xs font-semibold text-[#475569] uppercase tracking-wider">Leads Acessíveis</span>
+              <div className="text-base font-extrabold text-[#002B6A] flex items-center justify-between">
+                <span>
+                  {leads.filter(l => (l.reachability_score ?? 0) >= 80).length} <span className="text-[10px] text-[#475569] font-normal">Alta</span>
+                </span>
+                <span className="text-[10px] font-bold text-[#2D6BFF] bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-full cursor-pointer hover:bg-blue-100 transition-all select-none">
+                  Top 10
+                </span>
+              </div>
+            </div>
+            
+            {/* Hover Tooltip listing the top 10 */}
+            <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-64 bg-white border border-[#D8E0EA] rounded-xl shadow-xl p-3.5 z-30 hidden group-hover:block transition-all">
+              <h4 className="text-[10px] font-bold text-[#002B6A] border-b border-[#D8E0EA] pb-1.5 mb-2 uppercase tracking-wide">
+                Top 10 Leads Mais Acessíveis
+              </h4>
+              <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                {top10Accessible.length === 0 ? (
+                  <p className="text-[10px] text-slate-400 italic">Nenhum canal de contato ainda.</p>
+                ) : (
+                  top10Accessible.map((l, idx) => (
+                    <div key={l.id} className="flex justify-between items-center text-[10px] font-medium border-b border-slate-50 pb-1">
+                      <span className="text-[#061A40] truncate max-w-[150px]">
+                        {idx + 1}. {l.name}
+                      </span>
+                      <span className="text-emerald-700 bg-emerald-50 px-1.5 py-0.25 rounded-md font-bold">
+                        {l.reachability_score}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Stages Panel (Form, Status, or Result) */}
       <div className="transition-all duration-300">
         {currentStage === 'form' && (
           <div className="bg-white rounded-2xl border border-[#D8E0EA] p-6 shadow-sm w-full">
-            <h3 className="text-base font-bold text-[#002B6A] mb-4 flex items-center justify-between">
-              <span className="flex items-center gap-2">
-                <Search className="h-4.5 w-4.5 text-[#2D6BFF]" />
-                Iniciar Nova Captura
-              </span>
-              <button
-                type="button"
-                onClick={() => setShowTerminalInfo(prev => !prev)}
-                className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
-                  showTerminalInfo
-                    ? 'bg-[#EAF2FF] border-[#2D6BFF] text-[#2D6BFF] shadow-sm'
-                    : 'bg-white border-[#D8E0EA] text-[#475569] hover:bg-slate-50'
-                }`}
-                title="Executar Worker Local"
-              >
-                <Info className="h-4 w-4" />
-              </button>
+            <h3 className="text-base font-bold text-[#002B6A] mb-4 flex items-center gap-2">
+              <Search className="h-4.5 w-4.5 text-[#2D6BFF]" />
+              Iniciar Nova Captura
             </h3>
 
             <form onSubmit={handleStartCapture} className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1026,17 +1181,25 @@ export default function LeadFinderClient({
               </div>
 
               {/* Right Column: Map */}
-              <div className="space-y-1.5 flex flex-col justify-between">
+              <div className="space-y-1.5 flex flex-col justify-start gap-1">
                 <div className="flex justify-between items-center">
                   <label className="text-xs font-semibold text-[#002B6A]">Área Geográfica Selecionada</label>
                   <span className="text-[10px] text-[#475569]/80 font-mono bg-slate-100 px-2 py-0.5 rounded">
                     {lat.toFixed(4)}, {lng.toFixed(4)}
                   </span>
                 </div>
-                <div 
-                  ref={mapContainerRef} 
-                  className="w-full aspect-square md:h-[280px] md:aspect-auto rounded-2xl border border-[#D8E0EA] bg-slate-50 overflow-hidden z-10" 
-                />
+                <div className="relative w-full aspect-square md:h-[280px] md:aspect-auto rounded-2xl border border-[#D8E0EA] bg-slate-50 overflow-hidden z-10">
+                  <div 
+                    ref={mapContainerRef} 
+                    className="w-full h-full" 
+                  />
+                  {/* CSS Clouds Overlay */}
+                  <div className="absolute inset-0 pointer-events-none z-[1000] overflow-hidden">
+                    <div className="cloud-css cloud-1" />
+                    <div className="cloud-css cloud-2" />
+                    <div className="cloud-css cloud-3" />
+                  </div>
+                </div>
               </div>
             </form>
           </div>
@@ -1241,91 +1404,7 @@ export default function LeadFinderClient({
         </div>
       )}
 
-      {/* Dashboard Stats Grid */}
-      {leads.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          {/* Card 1: Melhor Lead */}
-          <div className="bg-white p-4 rounded-2xl border border-[#D8E0EA] shadow-xs flex flex-col justify-between h-24">
-            <span className="text-[10px] font-bold text-[#475569]/80 uppercase tracking-wider block">Melhor Lead</span>
-            <div className="flex items-baseline gap-1.5 min-w-0">
-              <span className="text-sm font-bold text-[#002B6A] truncate flex-1" title={bestLead?.name || 'N/A'}>
-                {bestLead?.name || 'N/A'}
-              </span>
-              {bestLead && (
-                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded-full shrink-0">
-                  {bestLead.lead_grade} — {bestLead.lead_score}
-                </span>
-              )}
-            </div>
-            <span className="text-[10px] text-[#475569]/70 block truncate">
-              {bestLead?.primary_contact || bestLead?.phone || bestLead?.website || 'Sem contato público'}
-            </span>
-          </div>
 
-          {/* Card 2: Score Médio de Contato */}
-          <div className="bg-white p-4 rounded-2xl border border-[#D8E0EA] shadow-xs flex flex-col justify-between h-24">
-            <span className="text-[10px] font-bold text-[#475569]/80 uppercase tracking-wider block">Score Médio de Contato</span>
-            <div className="text-lg font-extrabold text-[#002B6A] flex items-center gap-1.5">
-              {averageContactScore}
-              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                averageContactScore >= 70 ? 'text-emerald-700 bg-emerald-50 border border-emerald-100' :
-                averageContactScore >= 40 ? 'text-blue-700 bg-blue-50 border border-blue-100' :
-                'text-rose-700 bg-rose-50 border border-rose-100'
-              }`}>
-                {averageContactScore >= 70 ? 'Fácil' : averageContactScore >= 40 ? 'Médio' : 'Difícil'}
-              </span>
-            </div>
-            <span className="text-[10px] text-[#475569]/70 block">Média de canais de contato</span>
-          </div>
-
-          {/* Card 3: Leads Sem Canais */}
-          <div className="bg-white p-4 rounded-2xl border border-[#D8E0EA] shadow-xs flex flex-col justify-between h-24">
-            <span className="text-[10px] font-bold text-[#475569]/80 uppercase tracking-wider block">Leads Sem Canais</span>
-            <div className="text-lg font-extrabold text-rose-600">
-              {leadsNoChannels} <span className="text-xs text-[#475569] font-normal">/ {totalLeadsCount}</span>
-            </div>
-            <span className="text-[10px] text-[#475569]/70 block">Sem nenhum canal público localizado</span>
-          </div>
-
-          {/* Card 4: Top 10 Acessíveis Popover */}
-          <div className="bg-white p-4 rounded-2xl border border-[#D8E0EA] shadow-xs flex flex-col justify-between h-24 relative group">
-            <span className="text-[10px] font-bold text-[#475569]/80 uppercase tracking-wider block">Top Leads Acessíveis</span>
-            <div className="text-lg font-extrabold text-[#002B6A] flex items-center justify-between">
-              <span>
-                {leads.filter(l => (l.reachability_score ?? 0) >= 80).length}{' '}
-                <span className="text-xs text-[#475569] font-normal">Muito acessíveis</span>
-              </span>
-              <span className="text-[10px] font-bold text-[#2D6BFF] bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-full cursor-pointer hover:bg-blue-100 transition-all select-none">
-                Ver Top 10
-              </span>
-            </div>
-            <span className="text-[10px] text-[#475569]/70 block">Passe o mouse para ver a lista</span>
-
-            {/* Hover Tooltip listing the top 10 */}
-            <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-64 bg-white border border-[#D8E0EA] rounded-xl shadow-xl p-3.5 z-30 hidden group-hover:block transition-all">
-              <h4 className="text-[10px] font-bold text-[#002B6A] border-b border-[#D8E0EA] pb-1.5 mb-2 uppercase tracking-wide">
-                Top 10 Leads Mais Acessíveis
-              </h4>
-              <div className="space-y-1.5 max-h-48 overflow-y-auto">
-                {top10Accessible.length === 0 ? (
-                  <p className="text-[10px] text-slate-400 italic">Nenhum canal de contato ainda.</p>
-                ) : (
-                  top10Accessible.map((l, idx) => (
-                    <div key={l.id} className="flex justify-between items-center text-[10px] font-medium border-b border-slate-50 pb-1">
-                      <span className="text-[#061A40] truncate max-w-[150px]">
-                        {idx + 1}. {l.name}
-                      </span>
-                      <span className="text-emerald-700 bg-emerald-50 px-1.5 py-0.25 rounded-md font-bold">
-                        {l.reachability_score}
-                      </span>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Leads List Table */}
       <div className="bg-white rounded-2xl border border-[#D8E0EA] overflow-hidden shadow-sm">
@@ -1793,53 +1872,7 @@ export default function LeadFinderClient({
         </div>
       </div>
 
-      {/* Dev Terminal Instruction Modal */}
-      {showTerminalInfo && (
-        <div className="fixed inset-0 bg-[#061A40]/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div 
-            className="fixed inset-0" 
-            onClick={() => setShowTerminalInfo(false)} 
-          />
-          <div className="bg-[#061A40] text-blue-100 w-full max-w-md rounded-2xl border border-blue-900 shadow-2xl overflow-hidden relative p-6 space-y-4 z-10 animate-fade-in">
-            <div className="absolute right-0 top-0 translate-x-1/3 -translate-y-1/3 w-40 h-40 bg-blue-500/10 rounded-full blur-2xl pointer-events-none" />
-            
-            <div className="flex justify-between items-center relative z-10">
-              <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                <Terminal className="h-4 w-4 text-[#2D6BFF]" />
-                Executar Worker Local (Scraper)
-              </h3>
-              <button 
-                type="button"
-                onClick={() => setShowTerminalInfo(false)}
-                className="p-1 rounded-md text-blue-200 hover:bg-blue-950 transition-colors cursor-pointer"
-                title="Fechar"
-              >
-                <X className="h-4.5 w-4.5" />
-              </button>
-            </div>
-            
-            <p className="text-xs text-blue-200/80 leading-relaxed relative z-10">
-              O scraping utiliza o navegador local para não sobrecarregar as serverless functions.
-              Certifique-se de que o worker local está rodando em sua máquina para processar a busca:
-            </p>
 
-            <div className="bg-black/45 rounded-lg p-3 border border-blue-950 font-mono text-xs text-emerald-400 select-all flex items-center justify-between relative z-10">
-              <span>npm run worker:leads</span>
-              <span className="text-[10px] text-slate-500 select-none">Comando Terminal</span>
-            </div>
-
-            <div className="pt-2 flex justify-end relative z-10">
-              <button
-                type="button"
-                onClick={() => setShowTerminalInfo(false)}
-                className="px-4 py-2 bg-blue-950 text-white hover:bg-blue-900 border border-blue-800 text-xs font-bold rounded-lg transition-all cursor-pointer"
-              >
-                Entendido
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
       {/* Lead Details Modal */}
       {activeLead && (
         <div className="fixed inset-0 bg-[#061A40]/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">

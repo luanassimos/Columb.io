@@ -69,37 +69,146 @@ export async function captureCompanyLeads(
   const page = await browser.newPage();
   await page.setExtraHTTPHeaders({ 'Accept-Language': 'en-US,en;q=0.9' });
 
+  const apiPlaceIds = new Set<string>();
+  page.on('response', async (response) => {
+    try {
+      const resUrl = response.url();
+      if (resUrl.includes('search?') && (resUrl.includes('tbm=map') || resUrl.includes('pb='))) {
+        const text = await response.text();
+        const matches = text.match(/ChIJ[a-zA-Z0-9_-]{19,30}/g) || [];
+        for (const m of matches) {
+          apiPlaceIds.add(m);
+        }
+      }
+    } catch (e) {}
+  });
+
   try {
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    await page.waitForTimeout(2000);
+    await page.waitForTimeout(3000);
+
+    // Locate the sidebar panel
+    const feedSelector = 'div[role="feed"]';
+    await page.waitForSelector(feedSelector, { timeout: 10000 }).catch(() => {});
+    const feed = await page.$(feedSelector);
 
     let lastCount = 0;
     let stableRounds = 0;
-    while (stableRounds < 3) {
-      const feed = await page.$('div[role="feed"]');
-      if (feed) {
-        await page.evaluate(el => el.scrollTo(0, el.scrollHeight), feed);
+
+    if (feed) {
+      console.log('[LeadServices] Results sidebar panel located. Starting incremental scroll...');
+      while (stableRounds < 3) {
+        // Scroll incremental
+        await page.evaluate(el => el.scrollBy(0, 1000), feed);
+        await page.waitForTimeout(2000);
+
+        const currentCards = await feed.$$('a[href*="/maps/place/"]');
+        console.log(`[LeadServices] Found ${currentCards.length} cards in sidebar feed.`);
+
+        if (currentCards.length >= limitCount) {
+          console.log(`[LeadServices] Reached target limit count: ${limitCount}`);
+          break;
+        }
+
+        if (currentCards.length === lastCount) {
+          stableRounds++;
+          console.log(`[LeadServices] Stable round ${stableRounds}/3 (No new cards).`);
+        } else {
+          stableRounds = 0;
+          lastCount = currentCards.length;
+        }
+        await page.waitForTimeout(500);
       }
-      await page.waitForTimeout(2000);
-      const cards = await page.$$('a[href*="/maps/place/"]');
-      if (cards.length >= limitCount) break;
-      if (cards.length === lastCount) stableRounds++;
-      else stableRounds = 0;
-      lastCount = cards.length;
+    } else {
+      console.warn('[LeadServices] Could not find results sidebar feed container.');
     }
 
-    const cards = await page.$$('a[href*="/maps/place/"]');
+    // Select cards ONLY from the sidebar feed to avoid graphical map elements
+    const cards = feed ? await feed.$$('a[href*="/maps/place/"]') : [];
+    const sidebarCardsCount = cards.length;
+    console.log(`[LeadServices] Sidebar feed results count: ${sidebarCardsCount}`);
+
     let savedCount = 0;
+    const capturedKeys = new Set<string>();
+    const isDebug = process.env.DEBUG_SCRAPER === 'true' || process.env.NODE_ENV === 'development';
 
-    for (let i = 0; i < Math.min(cards.length, limitCount * 2); i++) {
+    for (let i = 0; i < cards.length; i++) {
       if (savedCount >= limitCount) break;
-      try {
-        const card = cards[i];
-        const href = await card.getAttribute('href');
-        const name = await card.getAttribute('aria-label') || await card.innerText().catch(() => '');
-        const trimmedName = name.trim();
-        if (!trimmedName) continue;
 
+      const card = cards[i];
+      let href = '';
+      let name = '';
+      let mapsId = '';
+      let latVal: number | null = null;
+      let lngVal: number | null = null;
+      let categoryVal = category;
+      let addressVal = '';
+      let normalizedKey = '';
+
+      try {
+        href = await card.getAttribute('href') || '';
+        name = await card.getAttribute('aria-label') || await card.innerText().catch(() => '');
+        name = name.trim();
+
+        if (!name || !href) continue;
+
+        // Parse Place ID (MAPS_ID) and POSITION coordinates directly from card URL
+        const placeIdMatch = href.match(/!19s([^!&?]+)/);
+        const hexIdMatch = href.match(/!1s([^!&?]+)/);
+        mapsId = placeIdMatch ? placeIdMatch[1] : (hexIdMatch ? hexIdMatch[1] : '');
+
+        const latMatch = href.match(/!3d(-?\d+\.\d+)/);
+        const lngMatch = href.match(/!4d(-?\d+\.\d+)/);
+        latVal = latMatch ? parseFloat(latMatch[1]) : null;
+        lngVal = lngMatch ? parseFloat(lngMatch[1]) : null;
+
+        // Extract category and address text from parent element
+        const parentText = await page.evaluate(el => el.parentElement?.innerText || '', card);
+        const lines = parentText.split('\n').map(l => l.trim()).filter(Boolean);
+
+        for (const line of lines) {
+          if (line.includes('·') || line.includes('\u00b7')) {
+            const parts = line.split(/[·\u00b7]/).map(p => p.trim());
+            const isHoursLine = parts.some(p => 
+              /open|close|fecha|aberto|horário|hour|fechado|abre/i.test(p) || 
+              /\d{1,2}:\d{2}/.test(p)
+            );
+            if (isHoursLine) continue;
+
+            if (parts.length >= 2) {
+              categoryVal = parts[0];
+              addressVal = parts[1];
+              break;
+            } else if (parts.length === 1) {
+              categoryVal = parts[0];
+            }
+          }
+        }
+
+        // Deduplication: normalized_name + address
+        const normName = name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '').trim();
+        const normAddress = addressVal.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '').trim();
+        normalizedKey = `${normName}_${normAddress}`;
+
+        if (capturedKeys.has(normalizedKey)) {
+          console.log(`[LeadServices] Skipping duplicate: "${name}" at "${addressVal}"`);
+          
+          if (isDebug) {
+            await page.evaluate(({ href, color }) => {
+              const anchor = document.querySelector(`a[href="${href}"]`);
+              const container = anchor?.closest('div[role="article"]') || anchor?.parentElement;
+              if (container) {
+                container.style.border = `3px solid ${color}`;
+                container.style.backgroundColor = 'rgba(255, 255, 0, 0.1)';
+              }
+            }, { href, color: 'yellow' });
+          }
+          continue;
+        }
+
+        capturedKeys.add(normalizedKey);
+
+        // Click card to load detail panel for full details
         await card.click();
         await page.waitForTimeout(1500);
 
@@ -120,10 +229,10 @@ export async function captureCompanyLeads(
           }
         } catch {}
 
-        let address: string | null = null;
+        let fullAddress: string | null = addressVal || null;
         try {
           const addrEl = await page.$('[data-tooltip="Copy address"]');
-          if (addrEl) address = await addrEl.getAttribute('data-value') || await addrEl.innerText();
+          if (addrEl) fullAddress = await addrEl.getAttribute('data-value') || await addrEl.innerText();
         } catch {}
 
         let rating: number | null = null;
@@ -145,45 +254,100 @@ export async function captureCompanyLeads(
           if (catEl) parsedCategory = await catEl.innerText();
         } catch {}
 
-        let leadLat: number | null = null;
-        let leadLng: number | null = null;
-        try {
-          const currentUrl = page.url();
-          const coordMatch = currentUrl.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
-          if (coordMatch) {
-            leadLat = parseFloat(coordMatch[1]);
-            leadLng = parseFloat(coordMatch[2]);
-          }
-        } catch {}
-
         let email: string | null = null;
         if (website) {
           email = await scrapeEmailFromWebsite(website);
         }
 
-        if (onlyEmail && !email) continue;
+        if (onlyEmail && !email) {
+          if (isDebug) {
+            await page.evaluate(({ href, color }) => {
+              const anchor = document.querySelector(`a[href="${href}"]`);
+              const container = anchor?.closest('div[role="article"]') || anchor?.parentElement;
+              if (container) {
+                container.style.border = `3px solid ${color}`;
+                container.style.backgroundColor = 'rgba(255, 255, 0, 0.1)';
+              }
+            }, { href, color: 'yellow' });
+          }
+          continue;
+        }
 
         const lead = {
-          name: trimmedName,
+          name,
           phone: phone ? phone.trim() : null,
-          address: address ? address.trim() : null,
+          address: fullAddress ? fullAddress.trim() : null,
           website: website || null,
           email,
-          category: parsedCategory || category,
-          lat: leadLat,
-          lng: leadLng,
+          category: parsedCategory || categoryVal || category,
+          lat: latVal,
+          lng: lngVal,
           maps_url: href || null,
           rating,
           reviews_count: reviewsCount,
         };
 
         const saved = await onProgress(savedCount + 1, lead);
-        if (saved) savedCount++;
+        if (saved) {
+          savedCount++;
+          
+          if (isDebug) {
+            await page.evaluate(({ href, color }) => {
+              const anchor = document.querySelector(`a[href="${href}"]`);
+              const container = anchor?.closest('div[role="article"]') || anchor?.parentElement;
+              if (container) {
+                container.style.border = `3px solid ${color}`;
+                container.style.backgroundColor = 'rgba(0, 255, 0, 0.1)';
+              }
+            }, { href, color: 'green' });
+          }
+        } else {
+          if (isDebug) {
+            await page.evaluate(({ href, color }) => {
+              const anchor = document.querySelector(`a[href="${href}"]`);
+              const container = anchor?.closest('div[role="article"]') || anchor?.parentElement;
+              if (container) {
+                container.style.border = `3px solid ${color}`;
+                container.style.backgroundColor = 'rgba(255, 255, 0, 0.1)';
+              }
+            }, { href, color: 'yellow' });
+          }
+        }
         await page.waitForTimeout(100);
       } catch (cardErr) {
         console.error(`[LeadServices] Error processing company card ${i + 1}:`, cardErr);
+        
+        if (isDebug && href) {
+          await page.evaluate(({ href, color }) => {
+            const anchor = document.querySelector(`a[href="${href}"]`);
+            const container = anchor?.closest('div[role="article"]') || anchor?.parentElement;
+            if (container) {
+              container.style.border = `3px solid ${color}`;
+              container.style.backgroundColor = 'rgba(255, 0, 0, 0.1)';
+            }
+          }, { href, color: 'red' });
+        }
       }
     }
+
+    // Final audit matching Place IDs in final HTML content to catch any last markers
+    try {
+      const content = await page.content();
+      const matches = content.match(/ChIJ[a-zA-Z0-9_-]{19,30}/g) || [];
+      for (const m of matches) {
+        apiPlaceIds.add(m);
+      }
+    } catch {}
+
+    const visibleMarkersEstimate = apiPlaceIds.size;
+    const missedCount = Math.max(0, sidebarCardsCount - savedCount);
+
+    console.log('\nVISIBLE_MARKERS_ESTIMATE:', visibleMarkersEstimate);
+    console.log('SIDEBAR_CARDS:', sidebarCardsCount);
+    console.log('EXTRACTED:', savedCount);
+    console.log('MISSED:', missedCount);
+    console.log('');
+
   } finally {
     await browser.close();
   }
