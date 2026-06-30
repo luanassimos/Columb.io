@@ -328,6 +328,11 @@ export default function ProfessionalFinderClient({
 
 
 
+  const latestJobRef = useRef(latestJob);
+  useEffect(() => {
+    latestJobRef.current = latestJob;
+  }, [latestJob]);
+
   // Polling for pending or running jobs
   useEffect(() => {
     if (!latestJob) return;
@@ -349,13 +354,25 @@ export default function ProfessionalFinderClient({
         if (response.ok) {
           const data = await response.json();
           if (data.success && data.job) {
+            const prevJob = latestJobRef.current;
+            const oldProgress = prevJob?.progress_count || 0;
+            const newProgress = data.job.progress_count || 0;
+            const oldStatus = prevJob?.status;
+            const newStatus = data.job.status;
+
             setLatestJob(data.job);
+
+            // Fetch new leads dynamically during extraction when progress or status updates
+            if (newProgress !== oldProgress || newStatus !== oldStatus) {
+              router.refresh();
+            }
+
+            // If status completed or failed, stop polling
             if (data.job.status !== 'pending' && data.job.status !== 'running') {
               if (pollingRef.current) {
                 clearInterval(pollingRef.current);
                 pollingRef.current = null;
               }
-              router.refresh();
             }
           }
         }
