@@ -197,8 +197,8 @@ export default function ProfessionalFinderClient({
       // Create map instance
       map = L.map(mapContainerRef.current!).setView([lat, lng], 12);
 
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors',
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+        attribution: '© OpenStreetMap contributors, © CartoDB',
       }).addTo(map);
 
       // Create marker (draggable to set region)
@@ -642,18 +642,62 @@ export default function ProfessionalFinderClient({
 
   return (
     <div className="space-y-6">
-      {/* Top Banner / Headline */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-black text-[#002B6A] tracking-tight flex items-center gap-2.5">
-            <Briefcase className="h-6 w-6 text-[#2D6BFF]" />
-            Captação de Profissionais
-          </h2>
-          <p className="text-sm text-[#475569] font-medium mt-1">
-            Descubra perfis e oportunidades de trabalho qualificados para campanhas direcionadas.
-          </p>
-        </div>
-      </div>
+      {/* Animation Styles */}
+      <style>{`
+        @keyframes drift {
+          0% { left: -150px; }
+          100% { left: 100%; }
+        }
+        .cloud-css {
+          position: absolute;
+          background: #ffffff;
+          border-radius: 9999px;
+          opacity: 0.85;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05), inset 0 -4px 8px rgba(0, 0, 0, 0.05);
+          filter: blur(1px);
+          pointer-events: none;
+        }
+        .cloud-css::before, .cloud-css::after {
+          content: '';
+          position: absolute;
+          background: #ffffff;
+          border-radius: 50%;
+        }
+        .cloud-css::before {
+          width: 50%;
+          height: 100%;
+          top: -40%;
+          left: 15%;
+        }
+        .cloud-css::after {
+          width: 40%;
+          height: 80%;
+          top: -30%;
+          right: 15%;
+        }
+        .cloud-1 {
+          width: 80px;
+          height: 30px;
+          top: 15%;
+          animation: drift 25s linear infinite;
+        }
+        .cloud-2 {
+          width: 100px;
+          height: 35px;
+          top: 40%;
+          animation: drift 35s linear infinite;
+          animation-delay: 5s;
+          opacity: 0.6;
+        }
+        .cloud-3 {
+          width: 60px;
+          height: 25px;
+          top: 70%;
+          animation: drift 20s linear infinite;
+          animation-delay: 10s;
+          opacity: 0.8;
+        }
+      `}</style>
 
       {/* Dashboard Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -701,7 +745,7 @@ export default function ProfessionalFinderClient({
       {/* Main Flow Container */}
       <div className="transition-all duration-300">
         {currentStage === 'form' && (
-          <div className="bg-white rounded-2xl border border-[#D8E0EA] p-6 shadow-sm max-w-4xl mx-auto">
+          <div className="bg-white rounded-2xl border border-[#D8E0EA] p-6 shadow-sm w-full">
             <h3 className="text-base font-bold text-[#002B6A] mb-6 flex items-center gap-2 border-b border-[#D8E0EA] pb-3">
               <Sparkles className="h-4.5 w-4.5 text-[#2D6BFF]" />
               Iniciar Captura de Perfis Profissionais
@@ -847,17 +891,25 @@ export default function ProfessionalFinderClient({
               </div>
 
               {/* Right Column: Map */}
-              <div className="space-y-1.5 flex flex-col justify-between">
+              <div className="space-y-1.5 flex flex-col justify-start gap-1">
                 <div className="flex justify-between items-center">
                   <label className="text-xs font-semibold text-[#002B6A]">Área Geográfica Selecionada</label>
                   <span className="text-[10px] text-[#475569]/80 font-mono bg-slate-100 px-2 py-0.5 rounded">
                     {lat.toFixed(4)}, {lng.toFixed(4)}
                   </span>
                 </div>
-                <div 
-                  ref={mapContainerRef} 
-                  className="w-full aspect-square md:h-[280px] md:aspect-auto rounded-2xl border border-[#D8E0EA] bg-slate-50 overflow-hidden z-10" 
-                />
+                <div className="relative w-full aspect-square md:h-[280px] md:aspect-auto rounded-2xl border border-[#D8E0EA] bg-slate-50 overflow-hidden z-10">
+                  <div 
+                    ref={mapContainerRef} 
+                    className="w-full h-full" 
+                  />
+                  {/* CSS Clouds Overlay */}
+                  <div className="absolute inset-0 pointer-events-none z-[1000] overflow-hidden">
+                    <div className="cloud-css cloud-1" />
+                    <div className="cloud-css cloud-2" />
+                    <div className="cloud-css cloud-3" />
+                  </div>
+                </div>
               </div>
             </form>
           </div>
