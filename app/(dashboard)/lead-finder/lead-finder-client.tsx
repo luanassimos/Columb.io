@@ -62,6 +62,7 @@ interface Lead {
     contact_form?: boolean;
     email?: string;
   };
+  sources?: string[];
 }
 
 interface LeadFinderClientProps {
@@ -1304,6 +1305,37 @@ export default function LeadFinderClient({
                   </div>
                 </div>
               )}
+
+              {latestJob.execution_summary && (
+                <div className="mt-4 p-4 bg-white border border-[#D8E0EA] rounded-xl text-xs space-y-2">
+                  <div className="font-bold text-[#002B6A] border-b border-slate-100 pb-1.5 flex items-center gap-1.5">
+                    <Terminal className="h-3.5 w-3.5 text-[#2D6BFF]" />
+                    Resumo da Captura (Múltiplos Provedores)
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-center">
+                    <div className="bg-[#F7FAFF] p-2.5 rounded-lg border border-slate-100">
+                      <span className="block text-[9px] text-[#475569] font-bold uppercase tracking-wider">Google Maps</span>
+                      <span className="text-sm font-extrabold text-[#002B6A]">{latestJob.execution_summary.google_results ?? 0}</span>
+                    </div>
+                    <div className="bg-[#F7FAFF] p-2.5 rounded-lg border border-slate-100">
+                      <span className="block text-[9px] text-[#475569] font-bold uppercase tracking-wider">Yelp</span>
+                      <span className="text-sm font-extrabold text-[#002B6A]">{latestJob.execution_summary.yelp_results ?? 0}</span>
+                    </div>
+                    <div className="bg-[#F7FAFF] p-2.5 rounded-lg border border-slate-100">
+                      <span className="block text-[9px] text-[#475569] font-bold uppercase tracking-wider">Mesclados</span>
+                      <span className="text-sm font-extrabold text-[#002B6A]">{latestJob.execution_summary.merged ?? 0}</span>
+                    </div>
+                    <div className="bg-[#FFF5F5] p-2.5 rounded-lg border border-red-50">
+                      <span className="block text-[9px] text-rose-600 font-bold uppercase tracking-wider">Duplicados</span>
+                      <span className="text-sm font-extrabold text-rose-600">{latestJob.execution_summary.duplicates ?? 0}</span>
+                    </div>
+                    <div className="bg-[#F2FBF6] p-2.5 rounded-lg border border-emerald-50">
+                      <span className="block text-[9px] text-emerald-700 font-bold uppercase tracking-wider">Salvos</span>
+                      <span className="text-sm font-extrabold text-emerald-700">{latestJob.execution_summary.saved ?? 0}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -1361,6 +1393,37 @@ export default function LeadFinderClient({
               {latestJob.status === 'failed' && latestJob.error_message && (
                 <div className="mt-2 text-rose-600 text-xs font-semibold">
                   Erro: {latestJob.error_message}
+                </div>
+              )}
+
+              {latestJob.execution_summary && (
+                <div className="mt-4 p-4 bg-white border border-[#D8E0EA] rounded-xl text-xs space-y-2">
+                  <div className="font-bold text-[#002B6A] border-b border-slate-100 pb-1.5 flex items-center gap-1.5">
+                    <Terminal className="h-3.5 w-3.5 text-[#2D6BFF]" />
+                    Resumo da Captura (Múltiplos Provedores)
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-center">
+                    <div className="bg-[#F7FAFF] p-2.5 rounded-lg border border-slate-100">
+                      <span className="block text-[9px] text-[#475569] font-bold uppercase tracking-wider">Google Maps</span>
+                      <span className="text-sm font-extrabold text-[#002B6A]">{latestJob.execution_summary.google_results ?? 0}</span>
+                    </div>
+                    <div className="bg-[#F7FAFF] p-2.5 rounded-lg border border-slate-100">
+                      <span className="block text-[9px] text-[#475569] font-bold uppercase tracking-wider">Yelp</span>
+                      <span className="text-sm font-extrabold text-[#002B6A]">{latestJob.execution_summary.yelp_results ?? 0}</span>
+                    </div>
+                    <div className="bg-[#F7FAFF] p-2.5 rounded-lg border border-slate-100">
+                      <span className="block text-[9px] text-[#475569] font-bold uppercase tracking-wider">Mesclados</span>
+                      <span className="text-sm font-extrabold text-[#002B6A]">{latestJob.execution_summary.merged ?? 0}</span>
+                    </div>
+                    <div className="bg-[#FFF5F5] p-2.5 rounded-lg border border-red-50">
+                      <span className="block text-[9px] text-rose-600 font-bold uppercase tracking-wider">Duplicados</span>
+                      <span className="text-sm font-extrabold text-rose-600">{latestJob.execution_summary.duplicates ?? 0}</span>
+                    </div>
+                    <div className="bg-[#F2FBF6] p-2.5 rounded-lg border border-emerald-50">
+                      <span className="block text-[9px] text-emerald-700 font-bold uppercase tracking-wider">Salvos</span>
+                      <span className="text-sm font-extrabold text-emerald-700">{latestJob.execution_summary.saved ?? 0}</span>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
@@ -1657,8 +1720,26 @@ export default function LeadFinderClient({
                     </td>
 
                     {/* Name */}
-                    <td className="px-4 py-3 font-semibold text-[#002B6A] max-w-[200px] truncate" title={lead.name}>
-                      {lead.name}
+                    <td className="px-4 py-3 max-w-[200px]" title={lead.name}>
+                      <div className="font-semibold text-[#002B6A] truncate">{lead.name}</div>
+                      {lead.sources && lead.sources.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {lead.sources.map((src) => (
+                            <span
+                              key={src}
+                              className={`text-[8px] font-bold px-1.5 py-0.25 rounded-md border shrink-0 ${
+                                src === 'google_maps'
+                                  ? 'bg-blue-50 border-blue-100 text-blue-600'
+                                  : src === 'yelp'
+                                  ? 'bg-amber-50 border-amber-100 text-amber-700'
+                                  : 'bg-slate-50 border-slate-100 text-slate-500'
+                              }`}
+                            >
+                              {src === 'google_maps' ? 'Google Maps' : src === 'yelp' ? 'Yelp' : src}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </td>
 
                     {/* Phone */}
@@ -1903,6 +1984,24 @@ export default function LeadFinderClient({
                     {activeLead.region}
                   </span>
                 </div>
+                {activeLead.sources && activeLead.sources.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {activeLead.sources.map((src) => (
+                      <span
+                        key={src}
+                        className={`text-[8px] font-bold px-1.5 py-0.25 rounded-md border shrink-0 ${
+                          src === 'google_maps'
+                            ? 'bg-blue-50 border-blue-100 text-blue-600'
+                            : src === 'yelp'
+                            ? 'bg-amber-50 border-amber-100 text-amber-700'
+                            : 'bg-slate-50 border-slate-100 text-slate-500'
+                        }`}
+                      >
+                        {src === 'google_maps' ? 'Google Maps' : src === 'yelp' ? 'Yelp' : src}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Data Fields */}
