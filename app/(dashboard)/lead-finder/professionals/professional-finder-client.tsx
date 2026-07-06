@@ -117,6 +117,12 @@ export default function ProfessionalFinderClient({
   const [gradeFilter, setGradeFilter] = useState<'all' | 'A' | 'B' | 'C' | 'D'>('all');
   const [scoreFilter, setScoreFilter] = useState<number>(0);
 
+  // Reset page when search or filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, gradeFilter, scoreFilter]);
+
+
   // Import states
   const [isImporting, setIsImporting] = useState(false);
   const [importSuccess, setImportSuccess] = useState<string | null>(null);
@@ -625,6 +631,14 @@ export default function ProfessionalFinderClient({
       const bv = (b[sortKey] ?? '') as string;
       return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
     });
+
+  // Clamp currentPage if it exceeds totalPages
+  useEffect(() => {
+    const totalPages = Math.ceil(filtered.length / 10) || 1;
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [filtered.length, currentPage]);
 
   // Pagination
   const itemsPerPage = 10;

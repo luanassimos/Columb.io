@@ -479,10 +479,11 @@ export default function LeadFinderClient({
   const [sortKey, setSortKey] = useState<SortKey>('created_at');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
 
-  // Reset page when filters or list changes
+  // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, scoreFilter, leads, filterPhone, filterWebsite, filterForm, minReachability, minContactScore]);
+  }, [search, scoreFilter, filterPhone, filterWebsite, filterForm, minReachability, minContactScore]);
+
 
   // Sync latestJob from props initially
   useEffect(() => {
@@ -838,6 +839,14 @@ export default function LeadFinderClient({
       const bv = (b[sortKey] ?? '') as string;
       return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
     });
+
+  // Clamp currentPage if it exceeds totalPages
+  useEffect(() => {
+    const totalPages = Math.ceil(filtered.length / 10) || 1;
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [filtered.length, currentPage]);
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
