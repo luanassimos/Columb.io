@@ -18,6 +18,7 @@ export interface CreateContactInput {
   rating?: number;
   notes?: string;
   website?: string;
+  maps_url?: string;
 }
 
 export async function createContact(input: CreateContactInput) {
@@ -138,6 +139,7 @@ export async function createContact(input: CreateContactInput) {
       imported_at: new Date().toISOString(),
       notes: input.notes?.trim() || null,
       website: input.website?.trim() || null,
+      maps_url: input.maps_url?.trim() || null,
     })
     .select('id')
     .single();
@@ -164,6 +166,7 @@ export interface UpdateContactInput {
   rating?: number;
   notes?: string;
   website?: string;
+  maps_url?: string;
 }
 
 export async function updateContact(input: UpdateContactInput) {
@@ -194,6 +197,10 @@ export async function updateContact(input: UpdateContactInput) {
 
   if (input.website !== undefined) {
     updatePayload.website = input.website.trim() || null;
+  }
+
+  if (input.maps_url !== undefined) {
+    updatePayload.maps_url = input.maps_url.trim() || null;
   }
 
   const { error } = await supabase

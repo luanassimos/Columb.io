@@ -176,6 +176,7 @@ export interface Contact {
   imported_at?: string | null;
   notes?: string | null;
   website?: string | null;
+  maps_url?: string | null;
   created_at: string;
 }
 

@@ -216,6 +216,7 @@ export async function importLeadsToContacts(leadIds: string[]) {
       rating: 0,
       imported_at: new Date().toISOString(),
       website: lead.website || null,
+      maps_url: lead.maps_url || null,
     };
   });
 

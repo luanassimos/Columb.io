@@ -87,6 +87,7 @@ export default function ContactsClient({ contacts, role }: ContactsClientProps) 
       rating: selectedLead.rating,
       notes: drawerNotes,
       website: selectedLead.website || undefined,
+      maps_url: selectedLead.maps_url || undefined,
     });
     setIsSavingNotes(false);
     if (!result.error) {
@@ -176,6 +177,7 @@ export default function ContactsClient({ contacts, role }: ContactsClientProps) 
       status: selectedLead.status,
       rating: newRating,
       website: selectedLead.website || undefined,
+      maps_url: selectedLead.maps_url || undefined,
     });
     setIsUpdatingRating(false);
     if (!res.error) {
@@ -534,6 +536,7 @@ export default function ContactsClient({ contacts, role }: ContactsClientProps) 
                                   status: c.status,
                                   rating: star,
                                   website: c.website || undefined,
+                                  maps_url: c.maps_url || undefined,
                                 }).then(() => {
                                   router.refresh();
                                 });
@@ -817,9 +820,27 @@ export default function ContactsClient({ contacts, role }: ContactsClientProps) 
                     </div>
                     <div className="min-w-0 flex-1">
                       <span className="block text-[10px] text-[#475569]/65 font-bold uppercase">Cidade</span>
-                      <span className="font-semibold text-[#061A40] block">
-                        {selectedLead.city || '—'}
-                      </span>
+                      {selectedLead.maps_url ? (
+                        <a
+                          href={selectedLead.maps_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-semibold text-[#2D6BFF] hover:underline block truncate text-sm"
+                        >
+                          {selectedLead.city || 'Ver no mapa'}
+                        </a>
+                      ) : selectedLead.city ? (
+                        <a
+                          href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${selectedLead.company} ${selectedLead.city}`)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-semibold text-[#2D6BFF] hover:underline block truncate text-sm"
+                        >
+                          {selectedLead.city}
+                        </a>
+                      ) : (
+                        <span className="font-semibold text-[#061A40] block">—</span>
+                      )}
                     </div>
                   </div>
 

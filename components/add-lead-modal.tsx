@@ -49,6 +49,7 @@ export default function AddLeadModal({ isOpen, onClose, contactToEdit }: AddLead
   const [hoveredRating, setHoveredRating] = useState<number>(0);
   const [notes, setNotes] = useState('');
   const [website, setWebsite] = useState('');
+  const [mapsUrl, setMapsUrl] = useState('');
 
   const firstInputRef = useRef<HTMLInputElement>(null);
 
@@ -74,6 +75,7 @@ export default function AddLeadModal({ isOpen, onClose, contactToEdit }: AddLead
         setRating(contactToEdit.rating || 0);
         setNotes(contactToEdit.notes || '');
         setWebsite(contactToEdit.website || '');
+        setMapsUrl(contactToEdit.maps_url || '');
       } else {
         setName('');
         setCompany('');
@@ -86,6 +88,7 @@ export default function AddLeadModal({ isOpen, onClose, contactToEdit }: AddLead
         setRating(0);
         setNotes('');
         setWebsite('');
+        setMapsUrl('');
       }
     }
   }, [isOpen, contactToEdit]);
@@ -146,6 +149,7 @@ export default function AddLeadModal({ isOpen, onClose, contactToEdit }: AddLead
         rating,
         notes,
         website,
+        maps_url: mapsUrl || undefined,
       });
     } else {
       result = await createContact({
@@ -158,6 +162,7 @@ export default function AddLeadModal({ isOpen, onClose, contactToEdit }: AddLead
         rating,
         notes,
         website,
+        maps_url: mapsUrl || undefined,
       });
     }
     setIsSubmitting(false);
@@ -302,6 +307,24 @@ export default function AddLeadModal({ isOpen, onClose, contactToEdit }: AddLead
               value={website}
               onChange={e => setWebsite(e.target.value)}
               placeholder="https://www.example.com"
+              className="w-full px-3 py-2.5 rounded-lg border border-[#D8E0EA] bg-[#F7FAFF] text-sm text-[#061A40] placeholder-[#475569]/50 focus:outline-none focus:border-[#2D6BFF] focus:bg-white transition-all"
+            />
+          </div>
+
+          {/* Maps / Origin URL */}
+          <div className="space-y-1.5">
+            <label className="flex items-center gap-1.5 text-xs font-semibold text-[#002B6A]">
+              <svg className="h-3.5 w-3.5 text-[#002B6A]/75" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z" />
+                <circle cx="12" cy="10" r="3" />
+              </svg>
+              Link do Google Maps ou Yelp
+            </label>
+            <input
+              type="url"
+              value={mapsUrl}
+              onChange={e => setMapsUrl(e.target.value)}
+              placeholder="https://www.google.com/maps/place/..."
               className="w-full px-3 py-2.5 rounded-lg border border-[#D8E0EA] bg-[#F7FAFF] text-sm text-[#061A40] placeholder-[#475569]/50 focus:outline-none focus:border-[#2D6BFF] focus:bg-white transition-all"
             />
           </div>
