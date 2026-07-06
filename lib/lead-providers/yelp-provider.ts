@@ -64,13 +64,11 @@ export class YelpProvider implements CompanyLeadProvider {
           const name = b.name || 'Empresa Yelp';
           const address = b.location?.display_address ? b.location.display_address.join(', ') : null;
           const phone = b.phone || b.display_phone || null;
-          const website = this.generateWebsiteFromName(name);
-
           const companyLead: CompanyLead = {
             name,
             address,
             phone,
-            website,
+            website: null,
             latitude: b.coordinates?.latitude || null,
             longitude: b.coordinates?.longitude || null,
             provider: 'yelp',
@@ -91,15 +89,6 @@ export class YelpProvider implements CompanyLeadProvider {
       }
   }
 
-  private generateWebsiteFromName(name: string): string {
-    const slug = name
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^a-z0-9]/g, '')
-      .trim();
-    return `https://www.${slug || 'company'}.com`;
-  }
 
   private async generateMockLeads(params: {
     category: string;
@@ -144,7 +133,7 @@ export class YelpProvider implements CompanyLeadProvider {
         name: companyName,
         address: `${100 + i * 25} Main St, ${regionName}`,
         phone: `+55 (11) 98765-${1000 + i}`,
-        website: `https://www.${slug}.com.br`,
+        website: null,
         latitude: Number((baseLat + offsetLat).toFixed(6)),
         longitude: Number((baseLng + offsetLng).toFixed(6)),
         provider: 'yelp',
