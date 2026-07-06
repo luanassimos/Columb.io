@@ -47,6 +47,8 @@ export default function AddLeadModal({ isOpen, onClose, contactToEdit }: AddLead
   const [tagInput, setTagInput] = useState('');
   const [rating, setRating] = useState<number>(0);
   const [hoveredRating, setHoveredRating] = useState<number>(0);
+  const [notes, setNotes] = useState('');
+  const [website, setWebsite] = useState('');
 
   const firstInputRef = useRef<HTMLInputElement>(null);
 
@@ -70,6 +72,8 @@ export default function AddLeadModal({ isOpen, onClose, contactToEdit }: AddLead
         setStatus(contactToEdit.status || 'new');
         setTags(contactToEdit.tags || []);
         setRating(contactToEdit.rating || 0);
+        setNotes(contactToEdit.notes || '');
+        setWebsite(contactToEdit.website || '');
       } else {
         setName('');
         setCompany('');
@@ -80,6 +84,8 @@ export default function AddLeadModal({ isOpen, onClose, contactToEdit }: AddLead
         setStatus('new');
         setTags([]);
         setRating(0);
+        setNotes('');
+        setWebsite('');
       }
     }
   }, [isOpen, contactToEdit]);
@@ -138,6 +144,8 @@ export default function AddLeadModal({ isOpen, onClose, contactToEdit }: AddLead
         tags,
         status,
         rating,
+        notes,
+        website,
       });
     } else {
       result = await createContact({
@@ -148,6 +156,8 @@ export default function AddLeadModal({ isOpen, onClose, contactToEdit }: AddLead
         tags,
         status,
         rating,
+        notes,
+        website,
       });
     }
     setIsSubmitting(false);
@@ -278,6 +288,24 @@ export default function AddLeadModal({ isOpen, onClose, contactToEdit }: AddLead
             />
           </div>
 
+          {/* Website URL */}
+          <div className="space-y-1.5">
+            <label className="flex items-center gap-1.5 text-xs font-semibold text-[#002B6A]">
+              <svg className="h-3.5 w-3.5 text-[#002B6A]/75" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20M2 12h20" />
+              </svg>
+              Website URL
+            </label>
+            <input
+              type="url"
+              value={website}
+              onChange={e => setWebsite(e.target.value)}
+              placeholder="https://www.example.com"
+              className="w-full px-3 py-2.5 rounded-lg border border-[#D8E0EA] bg-[#F7FAFF] text-sm text-[#061A40] placeholder-[#475569]/50 focus:outline-none focus:border-[#2D6BFF] focus:bg-white transition-all"
+            />
+          </div>
+
           {/* Grau de Importância (Rating) */}
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-[#002B6A] flex items-center gap-1.5">
@@ -355,6 +383,23 @@ export default function AddLeadModal({ isOpen, onClose, contactToEdit }: AddLead
               />
             </div>
             <p className="text-[10px] text-[#475569]">Press Enter or comma to add a tag.</p>
+          </div>
+
+          {/* Notes / Comments */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-[#002B6A] flex items-center gap-1.5">
+              <svg className="h-3.5 w-3.5 text-[#002B6A]/75" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 0 1-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+              </svg>
+              Observações / Comentários Pessoais
+            </label>
+            <textarea
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+              placeholder="Adicione anotações ou pensamentos particulares sobre este lead..."
+              rows={3}
+              className="w-full px-3 py-2.5 rounded-lg border border-[#D8E0EA] bg-[#F7FAFF] text-sm text-[#061A40] placeholder-[#475569]/50 focus:outline-none focus:border-[#2D6BFF] focus:bg-white transition-all resize-none"
+            />
           </div>
 
           {/* Error */}

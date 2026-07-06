@@ -51,18 +51,50 @@ export default function ContactsClient({ contacts, role }: ContactsClientProps) 
   // Profile Drawer States
   const [selectedLead, setSelectedLead] = useState<Contact | null>(null);
   const [isUpdatingRating, setIsUpdatingRating] = useState(false);
+  const [drawerNotes, setDrawerNotes] = useState('');
+  const [isSavingNotes, setIsSavingNotes] = useState(false);
 
-  // Sync selectedLead when contacts list updates
+  // Sync selectedLead when contacts list updates or lead selection changes
   React.useEffect(() => {
     if (selectedLead) {
       const updated = contacts.find(c => c.id === selectedLead.id);
       if (updated) {
         setSelectedLead(updated);
+        setDrawerNotes(updated.notes || '');
       } else {
         setSelectedLead(null);
       }
+    } else {
+      setDrawerNotes('');
     }
-  }, [contacts]);
+  }, [contacts, selectedLead?.id]);
+
+  const handleSaveNotes = async () => {
+    if (!selectedLead) return;
+    if (drawerNotes === (selectedLead.notes || '')) return;
+
+    setIsSavingNotes(true);
+    const result = await updateContact({
+      id: selectedLead.id,
+      name: selectedLead.name,
+      company: selectedLead.company,
+      email: selectedLead.email,
+      phone: selectedLead.phone || undefined,
+      city: selectedLead.city || undefined,
+      linkedin_url: selectedLead.linkedin_url || undefined,
+      tags: selectedLead.tags,
+      status: selectedLead.status,
+      rating: selectedLead.rating,
+      notes: drawerNotes,
+      website: selectedLead.website || undefined,
+    });
+    setIsSavingNotes(false);
+    if (!result.error) {
+      router.refresh();
+    } else {
+      alert('Erro ao salvar observações: ' + result.error);
+    }
+  };
 
   const handleSelectRow = (id: string) => {
     if (!canEditContacts) return;
@@ -143,6 +175,7 @@ export default function ContactsClient({ contacts, role }: ContactsClientProps) 
       tags: selectedLead.tags,
       status: selectedLead.status,
       rating: newRating,
+      website: selectedLead.website || undefined,
     });
     setIsUpdatingRating(false);
     if (!res.error) {
@@ -500,6 +533,7 @@ export default function ContactsClient({ contacts, role }: ContactsClientProps) 
                                   tags: c.tags,
                                   status: c.status,
                                   rating: star,
+                                  website: c.website || undefined,
                                 }).then(() => {
                                   router.refresh();
                                 });
@@ -789,6 +823,32 @@ export default function ContactsClient({ contacts, role }: ContactsClientProps) 
                     </div>
                   </div>
 
+                  {/* Website */}
+                  <div className="flex items-center gap-3">
+                    <div className="h-8 w-8 rounded-lg bg-slate-50 flex items-center justify-center text-[#475569]/70 shrink-0">
+                      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <circle cx="12" cy="12" r="10" />
+                        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                        <path d="M2 12h20" />
+                      </svg>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <span className="block text-[10px] text-[#475569]/65 font-bold uppercase">Site / Website</span>
+                      {selectedLead.website ? (
+                        <a
+                          href={selectedLead.website.startsWith('http') ? selectedLead.website : `https://${selectedLead.website}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[#2D6BFF] hover:underline font-semibold block truncate"
+                        >
+                          {selectedLead.website}
+                        </a>
+                      ) : (
+                        <span className="text-[#475569]/60 block">—</span>
+                      )}
+                    </div>
+                  </div>
+
                   {/* LinkedIn */}
                   <div className="flex items-center gap-3">
                     <div className="h-8 w-8 rounded-lg bg-slate-50 flex items-center justify-center text-[#475569]/70 shrink-0">
@@ -835,6 +895,36 @@ export default function ContactsClient({ contacts, role }: ContactsClientProps) 
                   ) : (
                     <span className="text-sm text-[#475569]/60 italic">Nenhuma tag atribuída</span>
                   )}
+                </div>
+
+                {/* Personal Notes / Observações */}
+                <div className="space-y-2 pt-2">
+                  <div className="flex items-center justify-between border-b border-[#D8E0EA] pb-1.5">
+                    <h4 className="text-xs font-bold text-[#002B6A] uppercase tracking-wider flex items-center gap-1.5">
+                      <svg className="h-3.5 w-3.5 text-[#002B6A]/75" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 0 1-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                      </svg>
+                      Anotações Pessoais
+                    </h4>
+                    {drawerNotes !== (selectedLead.notes || '') && (
+                      <button
+                        type="button"
+                        disabled={isSavingNotes}
+                        onClick={handleSaveNotes}
+                        className="text-[10px] font-bold text-[#2D6BFF] hover:text-[#1b58ec] transition-colors flex items-center gap-1 cursor-pointer"
+                      >
+                        {isSavingNotes ? 'Salvando...' : 'Salvar'}
+                      </button>
+                    )}
+                  </div>
+                  <textarea
+                    value={drawerNotes}
+                    onChange={(e) => setDrawerNotes(e.target.value)}
+                    onBlur={handleSaveNotes}
+                    placeholder="Escreva observações ou ideias sobre esta lead..."
+                    rows={4}
+                    className="w-full p-2.5 rounded-lg border border-[#D8E0EA] bg-[#F7FAFF] text-xs text-[#061A40] placeholder-[#475569]/50 focus:outline-none focus:border-[#2D6BFF] focus:bg-white transition-all resize-none font-medium"
+                  />
                 </div>
 
                 <div className="pt-2 text-[10px] text-[#475569]/60 space-y-1">

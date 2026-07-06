@@ -16,6 +16,8 @@ export interface CreateContactInput {
   tags?: string[];
   status?: ContactStatus;
   rating?: number;
+  notes?: string;
+  website?: string;
 }
 
 export async function createContact(input: CreateContactInput) {
@@ -134,6 +136,8 @@ export async function createContact(input: CreateContactInput) {
       status: input.status || 'new',
       rating: input.rating !== undefined ? input.rating : 0,
       imported_at: new Date().toISOString(),
+      notes: input.notes?.trim() || null,
+      website: input.website?.trim() || null,
     })
     .select('id')
     .single();
@@ -158,6 +162,8 @@ export interface UpdateContactInput {
   tags?: string[];
   status?: ContactStatus;
   rating?: number;
+  notes?: string;
+  website?: string;
 }
 
 export async function updateContact(input: UpdateContactInput) {
@@ -180,6 +186,14 @@ export async function updateContact(input: UpdateContactInput) {
 
   if (input.rating !== undefined) {
     updatePayload.rating = input.rating;
+  }
+
+  if (input.notes !== undefined) {
+    updatePayload.notes = input.notes.trim() || null;
+  }
+
+  if (input.website !== undefined) {
+    updatePayload.website = input.website.trim() || null;
   }
 
   const { error } = await supabase

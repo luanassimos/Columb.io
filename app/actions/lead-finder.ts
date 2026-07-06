@@ -215,6 +215,7 @@ export async function importLeadsToContacts(leadIds: string[]) {
       status: 'new',
       rating: 0,
       imported_at: new Date().toISOString(),
+      website: lead.website || null,
     };
   });
 
