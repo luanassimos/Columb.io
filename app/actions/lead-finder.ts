@@ -395,3 +395,73 @@ export async function recalculateLeadsScore() {
   revalidatePath('/lead-finder/professionals');
   return { success: true, count: updatedCount };
 }
+
+export interface UpdateLeadInput {
+  name?: string;
+  phone?: string | null;
+  website?: string | null;
+  email?: string | null;
+  address?: string | null;
+  category?: string;
+  region?: string;
+}
+
+export async function updateLead(leadId: string, input: UpdateLeadInput) {
+  const context = await getActiveWorkspaceContext();
+  if ('error' in context) return { error: context.error };
+
+  const permissionError = assertPermission(context.role, 'manageContacts');
+  if (permissionError) return permissionError;
+
+  const { supabase, workspaceId } = context;
+
+  // 1. Fetch the existing lead
+  const { data: lead, error: fetchErr } = await supabase
+    .from('leads')
+    .select('*')
+    .eq('id', leadId)
+    .eq('workspace_id', workspaceId)
+    .single();
+
+  if (fetchErr || !lead) {
+    console.error('Error fetching lead to update:', fetchErr);
+    return { error: 'Lead não encontrado.' };
+  }
+
+  const updatedFields = {
+    ...lead,
+    ...input,
+  };
+
+  // Recalculate score and grade
+  const scoreInfo = calculateLeadScore(updatedFields);
+
+  const { error } = await supabase
+    .from('leads')
+    .update({
+      name: input.name !== undefined ? input.name : lead.name,
+      phone: input.phone !== undefined ? input.phone : lead.phone,
+      website: input.website !== undefined ? input.website : lead.website,
+      email: input.email !== undefined ? input.email : lead.email,
+      address: input.address !== undefined ? input.address : lead.address,
+      category: input.category !== undefined ? input.category : lead.category,
+      region: input.region !== undefined ? input.region : lead.region,
+      lead_score: scoreInfo.lead_score,
+      lead_grade: scoreInfo.lead_grade,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', leadId)
+    .eq('workspace_id', workspaceId);
+
+  if (error) {
+    console.error('Error updating lead:', error);
+    return { error: error.message };
+  }
+
+  revalidatePath('/lead-finder');
+  revalidatePath('/lead-finder/companies');
+  revalidatePath('/lead-finder/professionals');
+
+  return { success: true };
+}
+

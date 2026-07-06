@@ -26,7 +26,7 @@ import {
   FileText,
   Award
 } from 'lucide-react';
-import { createLeadJob, importLeadsToContacts, deleteLeads, recalculateLeadsScore } from '@/app/actions/lead-finder';
+import { createLeadJob, importLeadsToContacts, deleteLeads, recalculateLeadsScore, updateLead } from '@/app/actions/lead-finder';
 import { WorkspaceRole } from '@/lib/permissions';
 
 interface Lead {
@@ -62,6 +62,7 @@ interface Lead {
     contact_form?: boolean;
     email?: string;
   };
+  sources?: string[];
 }
 
 interface LeadFinderClientProps {
@@ -165,6 +166,63 @@ export default function LeadFinderClient({
   const [isCancelling, setIsCancelling] = useState(false);
   const [activeLead, setActiveLead] = useState<Lead | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isEditingLead, setIsEditingLead] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [editWebsite, setEditWebsite] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [editAddress, setEditAddress] = useState('');
+  const [isSavingLead, setIsSavingLead] = useState(false);
+
+  const handleStartEdit = () => {
+    if (!activeLead) return;
+    setEditName(activeLead.name || '');
+    setEditPhone(activeLead.phone || '');
+    setEditWebsite(activeLead.website || '');
+    setEditEmail(activeLead.email || '');
+    setEditAddress(activeLead.address || '');
+    setIsEditingLead(true);
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditingLead(false);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!activeLead) return;
+    setIsSavingLead(true);
+    try {
+      const res = await updateLead(activeLead.id, {
+        name: editName.trim(),
+        phone: editPhone.trim() || null,
+        website: editWebsite.trim() || null,
+        email: editEmail.trim() || null,
+        address: editAddress.trim() || null,
+      });
+
+      if (res.error) {
+        alert(`Erro ao salvar: ${res.error}`);
+      } else {
+        const updatedLead = {
+          ...activeLead,
+          name: editName.trim(),
+          phone: editPhone.trim() || null,
+          website: editWebsite.trim() || null,
+          email: editEmail.trim() || null,
+          address: editAddress.trim() || null,
+        };
+        setLeads((prev) =>
+          prev.map((l) => (l.id === activeLead.id ? { ...l, ...updatedLead } : l))
+        );
+        setActiveLead({ ...activeLead, ...updatedLead });
+        setIsEditingLead(false);
+      }
+    } catch (err: any) {
+      alert(`Erro: ${err.message}`);
+    } finally {
+      setIsSavingLead(false);
+    }
+  };
   const [showFormOverride, setShowFormOverride] = useState(false);
   const [showTerminalInfo, setShowTerminalInfo] = useState(false);
 
@@ -1304,6 +1362,37 @@ export default function LeadFinderClient({
                   </div>
                 </div>
               )}
+
+              {latestJob.execution_summary && (
+                <div className="mt-4 p-4 bg-white border border-[#D8E0EA] rounded-xl text-xs space-y-2">
+                  <div className="font-bold text-[#002B6A] border-b border-slate-100 pb-1.5 flex items-center gap-1.5">
+                    <Terminal className="h-3.5 w-3.5 text-[#2D6BFF]" />
+                    Resumo da Captura (Múltiplos Provedores)
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-center">
+                    <div className="bg-[#F7FAFF] p-2.5 rounded-lg border border-slate-100">
+                      <span className="block text-[9px] text-[#475569] font-bold uppercase tracking-wider">Google Maps</span>
+                      <span className="text-sm font-extrabold text-[#002B6A]">{latestJob.execution_summary.google_results ?? 0}</span>
+                    </div>
+                    <div className="bg-[#F7FAFF] p-2.5 rounded-lg border border-slate-100">
+                      <span className="block text-[9px] text-[#475569] font-bold uppercase tracking-wider">Yelp</span>
+                      <span className="text-sm font-extrabold text-[#002B6A]">{latestJob.execution_summary.yelp_results ?? 0}</span>
+                    </div>
+                    <div className="bg-[#F7FAFF] p-2.5 rounded-lg border border-slate-100">
+                      <span className="block text-[9px] text-[#475569] font-bold uppercase tracking-wider">Mesclados</span>
+                      <span className="text-sm font-extrabold text-[#002B6A]">{latestJob.execution_summary.merged ?? 0}</span>
+                    </div>
+                    <div className="bg-[#FFF5F5] p-2.5 rounded-lg border border-red-50">
+                      <span className="block text-[9px] text-rose-600 font-bold uppercase tracking-wider">Duplicados</span>
+                      <span className="text-sm font-extrabold text-rose-600">{latestJob.execution_summary.duplicates ?? 0}</span>
+                    </div>
+                    <div className="bg-[#F2FBF6] p-2.5 rounded-lg border border-emerald-50">
+                      <span className="block text-[9px] text-emerald-700 font-bold uppercase tracking-wider">Salvos</span>
+                      <span className="text-sm font-extrabold text-emerald-700">{latestJob.execution_summary.saved ?? 0}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -1361,6 +1450,37 @@ export default function LeadFinderClient({
               {latestJob.status === 'failed' && latestJob.error_message && (
                 <div className="mt-2 text-rose-600 text-xs font-semibold">
                   Erro: {latestJob.error_message}
+                </div>
+              )}
+
+              {latestJob.execution_summary && (
+                <div className="mt-4 p-4 bg-white border border-[#D8E0EA] rounded-xl text-xs space-y-2">
+                  <div className="font-bold text-[#002B6A] border-b border-slate-100 pb-1.5 flex items-center gap-1.5">
+                    <Terminal className="h-3.5 w-3.5 text-[#2D6BFF]" />
+                    Resumo da Captura (Múltiplos Provedores)
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-center">
+                    <div className="bg-[#F7FAFF] p-2.5 rounded-lg border border-slate-100">
+                      <span className="block text-[9px] text-[#475569] font-bold uppercase tracking-wider">Google Maps</span>
+                      <span className="text-sm font-extrabold text-[#002B6A]">{latestJob.execution_summary.google_results ?? 0}</span>
+                    </div>
+                    <div className="bg-[#F7FAFF] p-2.5 rounded-lg border border-slate-100">
+                      <span className="block text-[9px] text-[#475569] font-bold uppercase tracking-wider">Yelp</span>
+                      <span className="text-sm font-extrabold text-[#002B6A]">{latestJob.execution_summary.yelp_results ?? 0}</span>
+                    </div>
+                    <div className="bg-[#F7FAFF] p-2.5 rounded-lg border border-slate-100">
+                      <span className="block text-[9px] text-[#475569] font-bold uppercase tracking-wider">Mesclados</span>
+                      <span className="text-sm font-extrabold text-[#002B6A]">{latestJob.execution_summary.merged ?? 0}</span>
+                    </div>
+                    <div className="bg-[#FFF5F5] p-2.5 rounded-lg border border-red-50">
+                      <span className="block text-[9px] text-rose-600 font-bold uppercase tracking-wider">Duplicados</span>
+                      <span className="text-sm font-extrabold text-rose-600">{latestJob.execution_summary.duplicates ?? 0}</span>
+                    </div>
+                    <div className="bg-[#F2FBF6] p-2.5 rounded-lg border border-emerald-50">
+                      <span className="block text-[9px] text-emerald-700 font-bold uppercase tracking-wider">Salvos</span>
+                      <span className="text-sm font-extrabold text-emerald-700">{latestJob.execution_summary.saved ?? 0}</span>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
@@ -1657,8 +1777,26 @@ export default function LeadFinderClient({
                     </td>
 
                     {/* Name */}
-                    <td className="px-4 py-3 font-semibold text-[#002B6A] max-w-[200px] truncate" title={lead.name}>
-                      {lead.name}
+                    <td className="px-4 py-3 max-w-[200px]" title={lead.name}>
+                      <div className="font-semibold text-[#002B6A] truncate">{lead.name}</div>
+                      {lead.sources && lead.sources.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {lead.sources.map((src) => (
+                            <span
+                              key={src}
+                              className={`text-[8px] font-bold px-1.5 py-0.25 rounded-md border shrink-0 ${
+                                src === 'google_maps'
+                                  ? 'bg-blue-50 border-blue-100 text-blue-600'
+                                  : src === 'yelp'
+                                  ? 'bg-amber-50 border-amber-100 text-amber-700'
+                                  : 'bg-slate-50 border-slate-100 text-slate-500'
+                              }`}
+                            >
+                              {src === 'google_maps' ? 'Google Maps' : src === 'yelp' ? 'Yelp' : src}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </td>
 
                     {/* Phone */}
@@ -1879,10 +2017,15 @@ export default function LeadFinderClient({
           <div className="bg-white w-full max-w-lg rounded-2xl border border-[#D8E0EA] shadow-2xl overflow-hidden transform scale-100 transition-all duration-300">
             {/* Modal Header */}
             <div className="px-6 py-4 border-b border-[#D8E0EA] bg-[#F7FAFF] flex justify-between items-center">
-              <span className="text-xs font-extrabold text-[#2D6BFF] uppercase tracking-wider">Perfil do Lead</span>
+              <span className="text-xs font-extrabold text-[#2D6BFF] uppercase tracking-wider">
+                {isEditingLead ? 'Editar Perfil do Lead' : 'Perfil do Lead'}
+              </span>
               <button 
                 type="button"
-                onClick={() => setActiveLead(null)}
+                onClick={() => {
+                  setActiveLead(null);
+                  setIsEditingLead(false);
+                }}
                 className="p-1 rounded-md text-[#475569] hover:bg-slate-200 transition-colors cursor-pointer"
                 title="Fechar"
               >
@@ -1891,136 +2034,252 @@ export default function LeadFinderClient({
             </div>
 
             {/* Modal Content */}
-            <div className="p-6 space-y-6">
-              {/* Title & Badges */}
-              <div>
-                <h3 className="text-xl font-bold text-[#002B6A]">{activeLead.name}</h3>
-                <div className="flex flex-wrap gap-1.5 mt-2">
-                  <span className="px-2.5 py-0.5 bg-[#EAF2FF] text-[#002B6A] text-[10px] font-semibold rounded-full border border-[#2D6BFF]/10">
-                    {activeLead.category}
-                  </span>
-                  <span className="px-2.5 py-0.5 bg-slate-100 text-slate-700 text-[10px] font-semibold rounded-full">
-                    {activeLead.region}
-                  </span>
+            {isEditingLead ? (
+              <div className="p-6 space-y-4">
+                {/* Name */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-[#475569] uppercase tracking-wider font-bold">Nome da Empresa</label>
+                  <input
+                    type="text"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    className="w-full px-3 py-2 border border-[#D8E0EA] rounded-lg text-sm text-[#002B6A] focus:outline-none focus:ring-1 focus:ring-[#2D6BFF]"
+                  />
                 </div>
-              </div>
 
-              {/* Data Fields */}
-              <div className="space-y-4">
                 {/* Phone */}
-                <div className="flex items-start gap-3">
-                  <Phone className="h-4 w-4 text-[#475569] mt-0.5" />
-                  <div className="space-y-0.5">
-                    <span className="text-[10px] font-bold text-[#475569] uppercase tracking-wider">Telefone</span>
-                    {activeLead.phone ? (
-                      <a 
-                        href={`tel:${activeLead.phone}`} 
-                        className="block text-sm font-semibold text-[#002B6A] hover:text-[#2D6BFF] hover:underline"
-                      >
-                        {activeLead.phone}
-                      </a>
-                    ) : (
-                      <span className="block text-sm text-[#475569]/60 italic">Não disponível</span>
-                    )}
-                  </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-[#475569] uppercase tracking-wider font-bold">Telefone</label>
+                  <input
+                    type="text"
+                    value={editPhone}
+                    onChange={(e) => setEditPhone(e.target.value)}
+                    className="w-full px-3 py-2 border border-[#D8E0EA] rounded-lg text-sm text-[#002B6A] focus:outline-none focus:ring-1 focus:ring-[#2D6BFF]"
+                    placeholder="Ex: +55 (11) 99999-9999"
+                  />
                 </div>
 
                 {/* Website */}
-                <div className="flex items-start gap-3">
-                  <Globe className="h-4 w-4 text-[#475569] mt-0.5" />
-                  <div className="space-y-0.5">
-                    <span className="text-[10px] font-bold text-[#475569] uppercase tracking-wider">Website</span>
-                    {activeLead.website ? (
-                      <a 
-                        href={activeLead.website} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="block text-sm font-semibold text-[#2D6BFF] hover:underline truncate max-w-xs md:max-w-md"
-                      >
-                        {activeLead.website}
-                      </a>
-                    ) : (
-                      <span className="block text-sm text-[#475569]/60 italic">Não disponível</span>
-                    )}
-                  </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-[#475569] uppercase tracking-wider font-bold">Website</label>
+                  <input
+                    type="text"
+                    value={editWebsite}
+                    onChange={(e) => setEditWebsite(e.target.value)}
+                    className="w-full px-3 py-2 border border-[#D8E0EA] rounded-lg text-sm text-[#002B6A] focus:outline-none focus:ring-1 focus:ring-[#2D6BFF]"
+                    placeholder="Ex: https://www.empresa.com"
+                  />
                 </div>
 
                 {/* Email */}
-                {activeLead.email && (
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-[#475569] uppercase tracking-wider font-bold font-bold">E-mail</label>
+                  <input
+                    type="email"
+                    value={editEmail}
+                    onChange={(e) => setEditEmail(e.target.value)}
+                    className="w-full px-3 py-2 border border-[#D8E0EA] rounded-lg text-sm text-[#002B6A] focus:outline-none focus:ring-1 focus:ring-[#2D6BFF]"
+                    placeholder="Ex: contato@empresa.com"
+                  />
+                </div>
+
+                {/* Address */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-[#475569] uppercase tracking-wider font-bold">Endereço</label>
+                  <textarea
+                    value={editAddress}
+                    onChange={(e) => setEditAddress(e.target.value)}
+                    rows={3}
+                    className="w-full px-3 py-2 border border-[#D8E0EA] rounded-lg text-sm text-[#002B6A] focus:outline-none focus:ring-1 focus:ring-[#2D6BFF] resize-none"
+                    placeholder="Endereço completo da empresa"
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="p-6 space-y-6">
+                {/* Title & Badges */}
+                <div>
+                  <h3 className="text-xl font-bold text-[#002B6A]">{activeLead.name}</h3>
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    <span className="px-2.5 py-0.5 bg-[#EAF2FF] text-[#002B6A] text-[10px] font-semibold rounded-full border border-[#2D6BFF]/10">
+                      {activeLead.category}
+                    </span>
+                    <span className="px-2.5 py-0.5 bg-slate-100 text-slate-700 text-[10px] font-semibold rounded-full">
+                      {activeLead.region}
+                    </span>
+                  </div>
+                  {activeLead.sources && activeLead.sources.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {activeLead.sources.map((src) => (
+                        <span
+                          key={src}
+                          className={`text-[8px] font-bold px-1.5 py-0.25 rounded-md border shrink-0 ${
+                            src === 'google_maps'
+                              ? 'bg-blue-50 border-blue-100 text-blue-600'
+                              : src === 'yelp'
+                              ? 'bg-amber-50 border-amber-100 text-amber-700'
+                              : 'bg-slate-50 border-slate-100 text-slate-500'
+                          }`}
+                        >
+                          {src === 'google_maps' ? 'Google Maps' : src === 'yelp' ? 'Yelp' : src}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Data Fields */}
+                <div className="space-y-4">
+                  {/* Phone */}
+                  <div className="flex items-start gap-3">
+                    <Phone className="h-4 w-4 text-[#475569] mt-0.5" />
+                    <div className="space-y-0.5">
+                      <span className="text-[10px] font-bold text-[#475569] uppercase tracking-wider">Telefone</span>
+                      {activeLead.phone ? (
+                        <a 
+                          href={`tel:${activeLead.phone}`} 
+                          className="block text-sm font-semibold text-[#002B6A] hover:text-[#2D6BFF] hover:underline"
+                        >
+                          {activeLead.phone}
+                        </a>
+                      ) : (
+                        <span className="block text-sm text-[#475569]/60 italic">Não disponível</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Website */}
                   <div className="flex items-start gap-3">
                     <Globe className="h-4 w-4 text-[#475569] mt-0.5" />
                     <div className="space-y-0.5">
-                      <span className="text-[10px] font-bold text-[#475569] uppercase tracking-wider">E-mail</span>
-                      <span className="block text-sm font-semibold text-[#002B6A]">{activeLead.email}</span>
+                      <span className="text-[10px] font-bold text-[#475569] uppercase tracking-wider">Website</span>
+                      {activeLead.website ? (
+                        <a 
+                          href={activeLead.website} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="block text-sm font-semibold text-[#2D6BFF] hover:underline truncate max-w-xs md:max-w-md"
+                        >
+                          {activeLead.website}
+                        </a>
+                      ) : (
+                        <span className="block text-sm text-[#475569]/60 italic">Não disponível</span>
+                      )}
                     </div>
                   </div>
-                )}
 
-                {/* Address */}
-                <div className="flex items-start gap-3">
-                  <MapPin className="h-4 w-4 text-[#475569] mt-0.5" />
-                  <div className="space-y-0.5">
-                    <span className="text-[10px] font-bold text-[#475569] uppercase tracking-wider">Endereço</span>
-                    {activeLead.address ? (
-                      <span className="block text-sm font-medium text-[#061A40] leading-relaxed">
-                        {activeLead.address}
-                      </span>
-                    ) : (
-                      <span className="block text-sm text-[#475569]/60 italic">Não disponível</span>
-                    )}
+                  {/* Email */}
+                  {activeLead.email && (
+                    <div className="flex items-start gap-3">
+                      <Globe className="h-4 w-4 text-[#475569] mt-0.5" />
+                      <div className="space-y-0.5">
+                        <span className="text-[10px] font-bold text-[#475569] uppercase tracking-wider">E-mail</span>
+                        <span className="block text-sm font-semibold text-[#002B6A]">{activeLead.email}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Address */}
+                  <div className="flex items-start gap-3">
+                    <MapPin className="h-4 w-4 text-[#475569] mt-0.5" />
+                    <div className="space-y-0.5">
+                      <span className="text-[10px] font-bold text-[#475569] uppercase tracking-wider">Endereço</span>
+                      {activeLead.address ? (
+                        <span className="block text-sm font-medium text-[#061A40] leading-relaxed">
+                          {activeLead.address}
+                        </span>
+                      ) : (
+                        <span className="block text-sm text-[#475569]/60 italic">Não disponível</span>
+                      )}
+                    </div>
                   </div>
+
+                  {/* Coordinates */}
+                  {(activeLead.lat !== undefined && activeLead.lat !== null && activeLead.lng !== undefined && activeLead.lng !== null) && (
+                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
+                      <div>
+                        <span className="text-[9px] font-bold text-[#475569]/80 uppercase">Latitude</span>
+                        <span className="block text-xs font-mono text-[#061A40]">{activeLead.lat}</span>
+                      </div>
+                      <div>
+                        <span className="text-[9px] font-bold text-[#475569]/80 uppercase">Longitude</span>
+                        <span className="block text-xs font-mono text-[#061A40]">{activeLead.lng}</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
-
-                {/* Coordinates */}
-                {(activeLead.lat !== undefined && activeLead.lat !== null && activeLead.lng !== undefined && activeLead.lng !== null) && (
-                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
-                    <div>
-                      <span className="text-[9px] font-bold text-[#475569]/80 uppercase">Latitude</span>
-                      <span className="block text-xs font-mono text-[#061A40]">{activeLead.lat}</span>
-                    </div>
-                    <div>
-                      <span className="text-[9px] font-bold text-[#475569]/80 uppercase">Longitude</span>
-                      <span className="block text-xs font-mono text-[#061A40]">{activeLead.lng}</span>
-                    </div>
-                  </div>
-                )}
               </div>
-            </div>
+            )}
 
             {/* Modal Actions */}
-            <div className="px-6 py-4 bg-slate-50 border-t border-[#D8E0EA] flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
+            {isEditingLead ? (
+              <div className="px-6 py-4 bg-slate-50 border-t border-[#D8E0EA] flex items-center justify-end gap-3">
                 <button
                   type="button"
-                  onClick={() => setActiveLead(null)}
+                  onClick={handleCancelEdit}
+                  disabled={isSavingLead}
                   className="px-4 py-2 bg-white border border-[#D8E0EA] text-[#475569] hover:bg-slate-50 text-xs font-bold rounded-lg transition-all cursor-pointer"
                 >
-                  Voltar
+                  Cancelar
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleDeleteSingleLead(activeLead.id)}
-                  disabled={isDeleting}
-                  className="px-4 py-2 bg-rose-50 border border-rose-200 text-rose-600 hover:bg-rose-100 disabled:opacity-50 text-xs font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer"
+                  onClick={handleSaveEdit}
+                  disabled={isSavingLead || !editName.trim()}
+                  className="px-4 py-2 bg-[#2D6BFF] text-white hover:bg-[#1b58ec] disabled:opacity-50 text-xs font-bold rounded-lg transition-all inline-flex items-center gap-1.5 shadow-sm cursor-pointer"
                 >
-                  <Trash2 className="h-3.5 w-3.5" />
-                  Excluir Lead
+                  {isSavingLead ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Salvando...
+                    </>
+                  ) : (
+                    'Salvar Alterações'
+                  )}
                 </button>
               </div>
-              
-              <a
-                href={
-                  activeLead.maps_url || 
-                  `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(activeLead.name + ' ' + (activeLead.address || ''))}`
-                }
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-4 py-2 bg-[#2D6BFF] text-white hover:bg-[#1b58ec] text-xs font-bold rounded-lg transition-all inline-flex items-center gap-1.5 shadow-sm"
-              >
-                <Target className="h-3.5 w-3.5" />
-                Ver no Google Maps
-              </a>
-            </div>
+            ) : (
+              <div className="px-6 py-4 bg-slate-50 border-t border-[#D8E0EA] flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setActiveLead(null)}
+                    className="px-4 py-2 bg-white border border-[#D8E0EA] text-[#475569] hover:bg-slate-50 text-xs font-bold rounded-lg transition-all cursor-pointer"
+                  >
+                    Voltar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleStartEdit}
+                    className="px-4 py-2 bg-blue-50 border border-blue-200 text-[#2D6BFF] hover:bg-blue-100 text-xs font-bold rounded-lg transition-all cursor-pointer"
+                  >
+                    Editar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteSingleLead(activeLead.id)}
+                    disabled={isDeleting}
+                    className="px-4 py-2 bg-rose-50 border border-rose-200 text-rose-600 hover:bg-rose-100 disabled:opacity-50 text-xs font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Excluir Lead
+                  </button>
+                </div>
+                
+                <a
+                  href={
+                    activeLead.maps_url || 
+                    `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(activeLead.name + ' ' + (activeLead.address || ''))}`
+                  }
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-2 bg-[#2D6BFF] text-white hover:bg-[#1b58ec] text-xs font-bold rounded-lg transition-all inline-flex items-center gap-1.5 shadow-sm"
+                >
+                  <Target className="h-3.5 w-3.5" />
+                  Ver no Google Maps
+                </a>
+              </div>
+            )}
           </div>
         </div>
       )}

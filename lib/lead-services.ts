@@ -196,7 +196,7 @@ export async function captureCompanyLeads(
           if (isDebug) {
             await page.evaluate(({ href, color }) => {
               const anchor = document.querySelector(`a[href="${href}"]`);
-              const container = anchor?.closest('div[role="article"]') || anchor?.parentElement;
+              const container = (anchor?.closest('div[role="article"]') || anchor?.parentElement) as any;
               if (container) {
                 container.style.border = `3px solid ${color}`;
                 container.style.backgroundColor = 'rgba(255, 255, 0, 0.1)';
@@ -210,19 +210,26 @@ export async function captureCompanyLeads(
 
         // Click card to load detail panel for full details
         await card.click();
-        await page.waitForTimeout(1500);
+        await page.waitForTimeout(2500); // Increased wait time for details to load
 
         let phone: string | null = null;
         try {
-          const phoneEl = await page.$('[data-tooltip="Copy phone number"], [aria-label*="Phone"]');
-          if (phoneEl) phone = await phoneEl.getAttribute('data-value') || await phoneEl.innerText();
+          const phoneEl = await page.$('[data-item-id^="phone:tel:"], [data-tooltip*="phone" i], [data-tooltip*="telefone" i], [aria-label*="phone" i], [aria-label*="telefone" i]');
+          if (phoneEl) {
+            const itemId = await phoneEl.getAttribute('data-item-id');
+            if (itemId && itemId.startsWith('phone:tel:')) {
+              phone = itemId.replace('phone:tel:', '').trim();
+            } else {
+              phone = await phoneEl.getAttribute('data-value') || await phoneEl.innerText();
+            }
+          }
         } catch {}
 
         let website: string | null = null;
         try {
-          const webEl = await page.$('a[data-tooltip="Open website"], a[aria-label*="Website"]');
+          const webEl = await page.$('[data-item-id="authority"], a[data-tooltip*="website" i], a[data-tooltip*="site" i], a[aria-label*="website" i], a[aria-label*="site" i]');
           if (webEl) {
-            website = await webEl.getAttribute('href');
+            website = await webEl.getAttribute('href') || await webEl.getAttribute('data-value');
             if (website?.includes('google.com/url?')) {
               try { website = new URL(website).searchParams.get('q') ?? website; } catch {}
             }
@@ -231,8 +238,10 @@ export async function captureCompanyLeads(
 
         let fullAddress: string | null = addressVal || null;
         try {
-          const addrEl = await page.$('[data-tooltip="Copy address"]');
-          if (addrEl) fullAddress = await addrEl.getAttribute('data-value') || await addrEl.innerText();
+          const addrEl = await page.$('[data-item-id="address"], [data-tooltip*="address" i], [data-tooltip*="endereço" i], [aria-label*="address" i], [aria-label*="endereço" i]');
+          if (addrEl) {
+            fullAddress = await addrEl.getAttribute('data-value') || await addrEl.innerText();
+          }
         } catch {}
 
         let rating: number | null = null;
@@ -263,7 +272,7 @@ export async function captureCompanyLeads(
           if (isDebug) {
             await page.evaluate(({ href, color }) => {
               const anchor = document.querySelector(`a[href="${href}"]`);
-              const container = anchor?.closest('div[role="article"]') || anchor?.parentElement;
+              const container = (anchor?.closest('div[role="article"]') || anchor?.parentElement) as any;
               if (container) {
                 container.style.border = `3px solid ${color}`;
                 container.style.backgroundColor = 'rgba(255, 255, 0, 0.1)';
@@ -294,7 +303,7 @@ export async function captureCompanyLeads(
           if (isDebug) {
             await page.evaluate(({ href, color }) => {
               const anchor = document.querySelector(`a[href="${href}"]`);
-              const container = anchor?.closest('div[role="article"]') || anchor?.parentElement;
+              const container = (anchor?.closest('div[role="article"]') || anchor?.parentElement) as any;
               if (container) {
                 container.style.border = `3px solid ${color}`;
                 container.style.backgroundColor = 'rgba(0, 255, 0, 0.1)';
@@ -305,7 +314,7 @@ export async function captureCompanyLeads(
           if (isDebug) {
             await page.evaluate(({ href, color }) => {
               const anchor = document.querySelector(`a[href="${href}"]`);
-              const container = anchor?.closest('div[role="article"]') || anchor?.parentElement;
+              const container = (anchor?.closest('div[role="article"]') || anchor?.parentElement) as any;
               if (container) {
                 container.style.border = `3px solid ${color}`;
                 container.style.backgroundColor = 'rgba(255, 255, 0, 0.1)';
@@ -320,7 +329,7 @@ export async function captureCompanyLeads(
         if (isDebug && href) {
           await page.evaluate(({ href, color }) => {
             const anchor = document.querySelector(`a[href="${href}"]`);
-            const container = anchor?.closest('div[role="article"]') || anchor?.parentElement;
+            const container = (anchor?.closest('div[role="article"]') || anchor?.parentElement) as any;
             if (container) {
               container.style.border = `3px solid ${color}`;
               container.style.backgroundColor = 'rgba(255, 0, 0, 0.1)';
