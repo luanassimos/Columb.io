@@ -21,52 +21,9 @@ export async function runCompanyLeadPipeline(
   const gmapsProvider = new GoogleMapsProvider();
   const yelpProvider = new YelpProvider();
 
-  console.log(`\n[Pipeline] Starting parallel provider search...`);
-  
-  // 1. Run providers in parallel
-  const [gmapsResults, yelpResults] = await Promise.all([
-    gmapsProvider.search({ category, region, limitCount, lat, lng, radius }),
-    yelpProvider.search({ category, region, limitCount, lat, lng, radius })
-  ]);
+  console.log(`\n[Pipeline] Starting real-time company lead pipeline search...`);
 
-  const googleCount = gmapsResults.length;
-  const yelpCount = yelpResults.length;
-
-  console.log(`GOOGLE_RESULTS: ${googleCount}`);
-  console.log(`YELP_RESULTS: ${yelpCount}`);
-
-  // 2. Merge engine: Unify the results and deduplicate internally
-  const combinedResults: CompanyLead[] = [...gmapsResults, ...yelpResults];
-  const mergedResults: CompanyLead[] = [];
-  let internalDuplicates = 0;
-
-  for (const lead of combinedResults) {
-    let duplicateFound = false;
-    for (let i = 0; i < mergedResults.length; i++) {
-      if (areLeadsDuplicate(mergedResults[i], lead)) {
-        // Merge incoming into existing merged list element
-        mergedResults[i] = mergeLeadData(mergedResults[i], lead);
-        duplicateFound = true;
-        internalDuplicates++;
-        break;
-      }
-    }
-    if (!duplicateFound) {
-      // Set initial sources
-      (lead as any).sources = [lead.provider];
-      mergedResults.push(lead);
-    }
-  }
-
-  // Filter onlyEmail if enabled
-  const filteredMerged = onlyEmail
-    ? mergedResults.filter(l => l.email && l.email.trim().length > 0)
-    : mergedResults;
-
-  // Limit final list to the requested limitCount
-  const finalLeads = filteredMerged.slice(0, limitCount);
-
-  // 3. Deduplication against DB: Fetch existing leads for the workspace
+  // 1. Fetch existing leads for deduplication at the start
   const { data: existingLeads, error: fetchError } = await supabase
     .from('leads')
     .select('*')
@@ -77,28 +34,57 @@ export async function runCompanyLeadPipeline(
     throw new Error(`Failed to fetch existing leads from database: ${fetchError.message}`);
   }
 
-  const existingLeadsList = existingLeads || [];
-  let dbDuplicates = 0;
+  const activeSavedLeads = existingLeads ? [...existingLeads] : [];
   let savedCount = 0;
+  let internalDuplicates = 0;
+  let dbDuplicates = 0;
 
-  console.log(`[Pipeline] Merged results size: ${mergedResults.length}. Checking against ${existingLeadsList.length} database records...`);
+  // Track provider execution results counts
+  let googleCount = 0;
+  let yelpCount = 0;
 
-  // 4. Persistence: Update existing or Insert new
-  for (const incoming of finalLeads) {
-    let existingRecord = null;
-    for (const ex of existingLeadsList) {
-      if (areLeadsDuplicate(ex, incoming)) {
-        existingRecord = ex;
+  // Shared function to handle incoming lead in real-time
+  const handleIncomingLead = async (incoming: CompanyLead) => {
+    // A. Filter onlyEmail if enabled
+    if (onlyEmail && (!incoming.email || incoming.email.trim().length === 0)) {
+      return;
+    }
+
+    // B. Check limitCount condition
+    if (savedCount >= limitCount) {
+      return;
+    }
+
+    // Increment provider counts
+    if (incoming.provider === 'google_maps') {
+      googleCount++;
+    } else if (incoming.provider === 'yelp') {
+      yelpCount++;
+    }
+
+    // C. Deduplication check in activeSavedLeads
+    let duplicateIndex = -1;
+    for (let i = 0; i < activeSavedLeads.length; i++) {
+      if (areLeadsDuplicate(activeSavedLeads[i], incoming)) {
+        duplicateIndex = i;
         break;
       }
     }
 
-    if (existingRecord) {
-      dbDuplicates++;
-      // Merge new data fields into existing database lead record
-      const mergedPayload = mergeLeadData(existingRecord, incoming);
+    if (duplicateIndex !== -1) {
+      // It's a duplicate of an existing lead
+      const existingRecord = activeSavedLeads[duplicateIndex];
+      if (existingRecord.created_at) {
+        dbDuplicates++;
+      } else {
+        internalDuplicates++;
+      }
 
-      // Recalculate score on merged payload
+      // Merge new data fields
+      const mergedPayload = mergeLeadData(existingRecord, incoming);
+      activeSavedLeads[duplicateIndex] = mergedPayload;
+
+      // Recalculate score
       const score = calculateLeadScore({
         phone: mergedPayload.phone,
         website: mergedPayload.website,
@@ -131,8 +117,6 @@ export async function runCompanyLeadPipeline(
 
       if (updateErr) {
         console.error(`[Pipeline] Error updating existing lead "${incoming.name}":`, updateErr);
-      } else {
-        savedCount++;
       }
     } else {
       // Create new lead record
@@ -144,6 +128,9 @@ export async function runCompanyLeadPipeline(
         rating: incoming.rating,
         reviews_count: incoming.reviews_count
       });
+
+      // Set initial sources
+      (incoming as any).sources = [incoming.provider];
 
       const insertPayload = {
         workspace_id: workspaceId,
@@ -172,29 +159,50 @@ export async function runCompanyLeadPipeline(
         updated_at: new Date().toISOString()
       };
 
-      const { error: insertErr } = await supabase
+      const { data: insertedLead, error: insertErr } = await supabase
         .from('leads')
-        .insert(insertPayload);
+        .insert(insertPayload)
+        .select('*')
+        .single();
 
-      if (insertErr) {
+      if (insertErr || !insertedLead) {
         console.error(`[Pipeline] Error inserting new lead "${incoming.name}":`, insertErr);
       } else {
         savedCount++;
+        activeSavedLeads.push(insertedLead);
+
+        // Update progress count of the job in the database in real-time
+        await supabase
+          .from('lead_finder_jobs')
+          .update({
+            progress_count: savedCount,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', jobId);
       }
     }
-  }
+  };
+
+  // 2. Run providers in parallel, passing the real-time saving handler
+  await Promise.all([
+    gmapsProvider.search({ category, region, limitCount, lat, lng, radius, onLead: handleIncomingLead }),
+    yelpProvider.search({ category, region, limitCount, lat, lng, radius, onLead: handleIncomingLead })
+  ]);
 
   const totalDuplicates = internalDuplicates + dbDuplicates;
+  const mergedCount = activeSavedLeads.length - (existingLeads ? existingLeads.length : 0);
 
-  console.log(`MERGED: ${mergedResults.length}`);
+  console.log(`GOOGLE_RESULTS: ${googleCount}`);
+  console.log(`YELP_RESULTS: ${yelpCount}`);
+  console.log(`MERGED: ${mergedCount}`);
   console.log(`DUPLICATES: ${totalDuplicates}`);
   console.log(`SAVED: ${savedCount}\n`);
 
-  // 5. Update job status, progress_count, and execution summary in database
+  // 3. Update job final execution summary in database
   const executionSummary = {
     google_results: googleCount,
     yelp_results: yelpCount,
-    merged: mergedResults.length,
+    merged: mergedCount,
     duplicates: totalDuplicates,
     saved: savedCount
   };

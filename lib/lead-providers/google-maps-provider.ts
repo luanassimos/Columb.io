@@ -9,6 +9,7 @@ export class GoogleMapsProvider implements CompanyLeadProvider {
     lat: number | null;
     lng: number | null;
     radius: number | null;
+    onLead?: (lead: CompanyLead) => Promise<void>;
   }): Promise<CompanyLead[]> {
     const results: CompanyLead[] = [];
     console.log(`[GoogleMapsProvider] Starting search for "${params.category}" in "${params.region || 'Geo'}"`);
@@ -24,7 +25,7 @@ export class GoogleMapsProvider implements CompanyLeadProvider {
         params.radius,
         false, // onlyEmail is handled at the pipeline level after merging
         async (count, lead) => {
-          results.push({
+          const companyLead: CompanyLead = {
             name: lead.name,
             address: lead.address,
             phone: lead.phone,
@@ -38,7 +39,11 @@ export class GoogleMapsProvider implements CompanyLeadProvider {
             maps_url: lead.maps_url,
             rating: lead.rating,
             reviews_count: lead.reviews_count,
-          });
+          };
+          results.push(companyLead);
+          if (params.onLead) {
+            await params.onLead(companyLead);
+          }
           return true; // Keep scraping until limitCount is reached in captureCompanyLeads
         }
       );
