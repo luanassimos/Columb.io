@@ -21,7 +21,8 @@ import {
   Download,
   Send,
   SlidersHorizontal,
-  MapPin
+  MapPin,
+  Building2
 } from 'lucide-react';
 import { createLeadJob, importLeadsToContacts, deleteLeads } from '@/app/actions/lead-finder';
 import { WorkspaceRole } from '@/lib/permissions';
@@ -699,6 +700,24 @@ export default function ProfessionalFinderClient({
         }
       `}</style>
 
+      {/* Navigation Tabs */}
+      <div className="flex border-b border-[#D8E0EA] gap-2.5 mb-4">
+        <button
+          onClick={() => router.push('/lead-finder/companies')}
+          className="flex items-center gap-2 px-4 pb-3 text-sm font-bold border-b-2 transition-all cursor-pointer border-transparent text-[#475569] hover:text-[#002B6A] hover:border-slate-300"
+        >
+          <Building2 className="h-4 w-4" />
+          Company (Empresas)
+        </button>
+        <button
+          onClick={() => router.push('/lead-finder/professionals')}
+          className="flex items-center gap-2 px-4 pb-3 text-sm font-bold border-b-2 transition-all cursor-pointer border-[#2D6BFF] text-[#2D6BFF]"
+        >
+          <Users className="h-4 w-4" />
+          Professionals (Profissionais)
+        </button>
+      </div>
+
       {/* Dashboard Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white p-5 rounded-2xl border border-[#D8E0EA] shadow-sm flex items-center gap-4">
@@ -978,76 +997,102 @@ export default function ProfessionalFinderClient({
         )}
       </div>
 
-      {/* Leads Table Card */}
-      <div className="bg-white rounded-2xl border border-[#D8E0EA] p-6 shadow-sm space-y-4">
-        {/* Table Filters & Toolbar */}
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+      {/* Leads List Table */}
+      <div className="bg-white rounded-2xl border border-[#D8E0EA] overflow-hidden shadow-sm">
+        {/* Table Toolbar */}
+        <div className="px-4 py-3 border-b border-[#D8E0EA] flex flex-wrap items-center justify-between gap-3 bg-slate-50/30">
+          <div className="flex items-center gap-3 flex-1 min-w-[280px]">
+            {/* Actions Dropdown */}
+            <div className="relative">
+              <button
+                type="button"
+                disabled={selectedIds.size === 0 || isImporting}
+                onClick={() => setIsActionsOpen(!isActionsOpen)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#D8E0EA] bg-white text-xs font-semibold text-[#002B6A] hover:bg-[#F7FAFF] disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+              >
+                {isImporting ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-[#002B6A]" />
+                ) : (
+                  'Ações'
+                )}
+                <ChevronDown className="h-3 w-3" />
+              </button>
+
+              {isActionsOpen && selectedIds.size > 0 && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setIsActionsOpen(false)} />
+                  <div className="absolute left-0 mt-1.5 w-52 bg-white border border-[#D8E0EA] rounded-lg shadow-lg py-1.5 z-20">
+                    <button
+                      type="button"
+                      onClick={handleImportToCampaign}
+                      className="w-full text-left px-3 py-2 text-xs text-[#061A40] hover:bg-[#EAF2FF] transition-colors font-medium flex items-center gap-2 cursor-pointer"
+                    >
+                      <Send className="h-3.5 w-3.5 text-[#2D6BFF]" />
+                      Enviar para Campanha
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleExportCSV}
+                      className="w-full text-left px-3 py-2 text-xs text-[#061A40] hover:bg-[#EAF2FF] transition-colors font-medium flex items-center gap-2 cursor-pointer"
+                    >
+                      <Download className="h-3.5 w-3.5 text-slate-500" />
+                      Exportar CSV
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDeleteBulkLeads}
+                      disabled={isDeleting}
+                      className="w-full text-left px-3 py-2 text-xs text-rose-600 hover:bg-rose-50 transition-colors font-medium flex items-center gap-2 cursor-pointer border-t border-slate-100 disabled:opacity-50"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      Excluir Perfis
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Filter Search */}
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Buscar por nome, cargo ou localização..."
-              className="w-full pl-10 pr-4 py-2 text-sm rounded-lg border border-[#D8E0EA] focus:outline-none focus:border-[#2D6BFF] bg-slate-50 focus:bg-white transition-all placeholder-slate-400"
+              className="w-full max-w-xs px-3 py-1.5 rounded-lg border border-[#D8E0EA] bg-[#F7FAFF] text-sm text-[#061A40] placeholder-[#475569]/50 focus:outline-none focus:border-[#2D6BFF] transition-all"
             />
-          </div>
 
-          <div className="flex flex-wrap items-center gap-3">
+            {/* Advanced Filters Trigger Button */}
             <button
+              type="button"
               onClick={() => setIsFiltersOpen(!isFiltersOpen)}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-semibold transition-all cursor-pointer ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-bold transition-all cursor-pointer ${
                 isFiltersOpen
-                  ? 'bg-slate-100 border-slate-300 text-[#002B6A]'
-                  : 'bg-white border-[#D8E0EA] text-[#475569] hover:bg-slate-50'
+                  ? 'border-[#2D6BFF] bg-[#2D6BFF] text-white'
+                  : 'border-[#D8E0EA] bg-white text-[#002B6A] hover:bg-[#F7FAFF]'
               }`}
             >
-              <SlidersHorizontal className="h-3.5 w-3.5" />
               Filtros Avançados
+              <ChevronDown className={`h-3 w-3 transition-transform ${isFiltersOpen ? 'rotate-180' : ''}`} />
             </button>
-
-            {/* Actions Menu */}
-            {selectedIds.size > 0 && (
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handleImportToCampaign}
-                  disabled={isImporting}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#2D6BFF] text-white hover:bg-[#1b58ec] text-xs font-bold transition-all cursor-pointer shadow-sm disabled:opacity-50"
-                >
-                  {isImporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-                  Importar para Contatos ({selectedIds.size})
-                </button>
-
-                <button
-                  onClick={handleExportCSV}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[#D8E0EA] bg-white text-[#475569] hover:bg-slate-50 text-xs font-semibold transition-all cursor-pointer"
-                >
-                  <Download className="h-3.5 w-3.5" />
-                  Exportar CSV
-                </button>
-
-                <button
-                  onClick={handleDeleteBulkLeads}
-                  disabled={isDeleting}
-                  className="flex items-center justify-center h-8.5 w-8.5 rounded-lg border border-rose-100 bg-rose-50 text-rose-600 hover:bg-rose-100 transition-all cursor-pointer"
-                  title="Excluir Selecionados"
-                >
-                  {isDeleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                </button>
-              </div>
-            )}
           </div>
+
+          {selectedIds.size > 0 && (
+            <span className="text-xs text-[#475569] font-semibold bg-[#EAF2FF] px-2.5 py-1 rounded-full border border-[#2D6BFF]/20">
+              {selectedIds.size} selecionados
+            </span>
+          )}
         </div>
 
-        {/* Extended Filters Drawer */}
+        {/* Advanced Filters Panel */}
         {isFiltersOpen && (
-          <div className="p-4 rounded-xl border border-slate-100 bg-slate-50/50 grid grid-cols-1 sm:grid-cols-2 gap-4 animate-fade-in">
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-[#002B6A]">Filtrar por Qualidade (Grade)</label>
+          <div className="bg-slate-50/50 border-b border-[#D8E0EA] p-4 flex flex-wrap gap-6 items-center">
+            {/* Grade Filter */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-[#475569]">Qualidade (Grade):</span>
               <select
                 value={gradeFilter}
                 onChange={(e: any) => setGradeFilter(e.target.value)}
-                className="w-full px-3 py-2 text-xs rounded-lg border border-[#D8E0EA] bg-white text-[#061A40]"
+                className="px-2.5 py-1 text-xs rounded-lg border border-[#D8E0EA] bg-white text-[#061A40] focus:outline-none focus:border-[#2D6BFF] transition-all cursor-pointer font-semibold"
               >
                 <option value="all">Todas as Grades</option>
                 <option value="A">Apenas Grade A</option>
@@ -1056,8 +1101,9 @@ export default function ProfessionalFinderClient({
               </select>
             </div>
 
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-[#002B6A]">Score Mínimo: {scoreFilter}%</label>
+            {/* Score Filter */}
+            <div className="flex items-center gap-2 flex-1 max-w-xs">
+              <span className="text-xs font-bold text-[#475569] whitespace-nowrap">Score Mínimo: {scoreFilter}%</span>
               <input
                 type="range"
                 min="0"
@@ -1072,100 +1118,151 @@ export default function ProfessionalFinderClient({
 
         {/* Success/Error Alerts */}
         {importSuccess && (
-          <div className="p-3.5 bg-emerald-50 border border-emerald-200 text-xs text-emerald-700 font-semibold rounded-lg flex items-center gap-2">
-            <CheckCircle className="h-4 w-4 text-emerald-600 shrink-0" />
-            <span>{importSuccess}</span>
+          <div className="m-4 p-3.5 bg-emerald-50 border border-emerald-200 text-xs text-emerald-700 font-semibold rounded-lg flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <CheckCircle className="h-4 w-4 text-emerald-600 shrink-0" />
+              <span>{importSuccess}</span>
+            </div>
+            <button onClick={() => setImportSuccess(null)}>
+              <X className="h-4 w-4 text-emerald-600 hover:text-emerald-800" />
+            </button>
           </div>
         )}
         {importError && (
-          <div className="p-3.5 bg-rose-50 border border-rose-200 text-xs text-rose-700 font-semibold rounded-lg flex items-center gap-2">
-            <AlertCircle className="h-4 w-4 text-rose-600 shrink-0" />
-            <span>{importError}</span>
+          <div className="m-4 p-3.5 bg-rose-50 border border-rose-200 text-xs text-rose-700 font-semibold rounded-lg flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 text-rose-600 shrink-0" />
+              <span>{importError}</span>
+            </div>
+            <button onClick={() => setImportError(null)}>
+              <X className="h-4 w-4 text-rose-600 hover:text-rose-800" />
+            </button>
           </div>
         )}
 
-        {/* Data Table */}
-        <div className="overflow-x-auto border border-[#D8E0EA] rounded-xl">
-          <table className="w-full border-collapse text-sm text-[#061A40]">
-            <thead>
-              <tr className="bg-[#F7FAFF] border-b border-[#D8E0EA]">
-                <th className="px-4 py-3 w-10 text-center" onClick={(e) => e.stopPropagation()}>
+        {/* Table Container */}
+        <div className="overflow-x-auto min-h-[300px]">
+          <table className="w-full text-sm text-left">
+            <thead className="bg-[#F7FAFF] border-b border-[#D8E0EA]">
+              <tr>
+                <th className="px-4 py-3 text-left w-10">
                   <input
                     type="checkbox"
-                    checked={filtered.length > 0 && filtered.every(c => selectedIds.has(c.id))}
+                    checked={filtered.length > 0 && filtered.every((c) => selectedIds.has(c.id))}
                     onChange={() => handleSelectAll(filtered)}
-                    className="h-4 w-4 rounded border-slate-300 text-[#2D6BFF] focus:ring-[#2D6BFF] cursor-pointer"
+                    className="rounded border-[#D8E0EA] text-[#2D6BFF] focus:ring-[#2D6BFF] h-4 w-4 cursor-pointer"
+                    title="Selecionar todos"
                   />
                 </th>
-                <th className="px-4 py-3 text-left"><ThBtn col="display_name" label="Nome" /></th>
-                <th className="px-4 py-3 text-left"><ThBtn col="professional_role" label="Cargo / Função" /></th>
-                <th className="px-4 py-3 text-left"><ThBtn col="location" label="Localização" /></th>
-                <th className="px-4 py-3 text-center"><ThBtn col="professional_score" label="Score" /></th>
-                <th className="px-4 py-3 text-left">Canal / Link</th>
+                <th className="px-4 py-3"><ThBtn col="display_name" label="Profissional" /></th>
+                <th className="px-4 py-3"><ThBtn col="professional_role" label="Cargo / Função" /></th>
+                <th className="px-4 py-3"><ThBtn col="location" label="Localização" /></th>
+                <th className="px-4 py-3 text-xs font-semibold text-[#475569] uppercase tracking-wide">Canal / Link</th>
+                <th className="px-4 py-3"><ThBtn col="professional_score" label="Score" /></th>
+                <th className="px-4 py-3"><ThBtn col="created_at" label="Capturado em" /></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
-              {paginatedLeads.length > 0 ? (
+            <tbody className="divide-y divide-[#D8E0EA]">
+              {paginatedLeads.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-4 py-12 text-center text-[#475569]">
+                    Nenhum profissional capturado ou correspondente à busca.
+                  </td>
+                </tr>
+              ) : (
                 paginatedLeads.map((lead) => {
                   const isSelected = selectedIds.has(lead.id);
                   return (
                     <tr
                       key={lead.id}
                       onClick={() => setActiveLead(lead)}
-                      className={`hover:bg-[#F7FAFF]/50 transition-colors group cursor-pointer ${
-                        isSelected ? 'bg-[#EAF2FF]/30' : ''
-                      }`}
+                      className="hover:bg-[#F7FAFF]/80 transition-colors group cursor-pointer"
                     >
-                      <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
+                      {/* Checkbox */}
+                      <td className="px-4 py-3 w-10" onClick={(e) => e.stopPropagation()}>
                         <input
                           type="checkbox"
                           checked={isSelected}
                           onChange={() => handleSelectRow(lead.id)}
-                          className="h-4 w-4 rounded border-slate-300 text-[#2D6BFF] focus:ring-[#2D6BFF] cursor-pointer"
+                          className="rounded border-[#D8E0EA] text-[#2D6BFF] focus:ring-[#2D6BFF] h-4 w-4 cursor-pointer"
                         />
                       </td>
-                      <td className="px-4 py-3 font-bold text-[#002B6A]">
-                        {lead.display_name}
+
+                      {/* Profissional (Name + origin tag) */}
+                      <td className="px-4 py-3 max-w-[200px]" title={lead.display_name}>
+                        <div className="font-semibold text-[#002B6A] truncate">{lead.display_name}</div>
+                        {lead.lead_origin && (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            <span className="text-[8px] font-bold px-1.5 py-0.25 rounded-md border bg-slate-50 border-slate-100 text-slate-500 shrink-0">
+                              {lead.lead_origin === 'linkedin' ? 'LinkedIn' : lead.lead_origin}
+                            </span>
+                          </div>
+                        )}
                       </td>
-                      <td className="px-4 py-3 font-medium text-slate-600">
-                        {lead.professional_role}
+
+                      {/* Cargo / Função */}
+                      <td className="px-4 py-3 font-medium text-slate-600 whitespace-nowrap">
+                        {lead.professional_role || <span className="text-[#D8E0EA]">—</span>}
                       </td>
-                      <td className="px-4 py-3 text-slate-500 font-medium text-xs">
-                        {lead.location}
+
+                      {/* Localização */}
+                      <td className="px-4 py-3 text-xs text-[#475569] max-w-[200px] truncate" title={lead.location}>
+                        {lead.location ? (
+                          <span className="flex items-center gap-1.5">
+                            <MapPin className="h-3.5 w-3.5 text-[#475569]/55 shrink-0" />
+                            <span className="truncate">{lead.location}</span>
+                          </span>
+                        ) : (
+                          <span className="text-[#D8E0EA]">—</span>
+                        )}
                       </td>
-                      <td className="px-4 py-3 text-center">
-                        <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-black ${
-                          lead.lead_grade === 'A' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
-                          lead.lead_grade === 'B' ? 'bg-blue-50 text-blue-700 border border-blue-200' :
-                          lead.lead_grade === 'C' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
-                          'bg-slate-50 text-slate-600 border border-slate-200'
-                        }`}>
-                          {lead.professional_score}% ({lead.lead_grade})
-                        </span>
-                      </td>
+
+                      {/* Canal / Link */}
                       <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                         {lead.profile_url ? (
                           <a
                             href={lead.profile_url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-xs text-[#2D6BFF] hover:underline font-semibold"
+                            className="inline-flex items-center gap-1 text-[#2D6BFF] hover:underline font-semibold text-xs"
                           >
-                            LinkedIn Perfil
+                            <Globe className="h-3.5 w-3.5" />
+                            Visitar Perfil
                           </a>
                         ) : (
-                          <span className="text-xs text-slate-400 font-medium">Sem Link</span>
+                          <span className="text-[#D8E0EA]">—</span>
                         )}
+                      </td>
+
+                      {/* Score */}
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <div className="flex flex-col gap-0.5">
+                          <span className="flex items-center gap-1.5 font-bold text-xs">
+                            <span className={`h-2.5 w-2.5 rounded-full ${
+                              lead.lead_grade === 'A' ? 'bg-emerald-500' :
+                              lead.lead_grade === 'B' ? 'bg-blue-500' :
+                              lead.lead_grade === 'C' ? 'bg-amber-500' :
+                              'bg-rose-500'
+                            }`} />
+                            <span className={`${
+                              lead.lead_grade === 'A' ? 'text-emerald-700' :
+                              lead.lead_grade === 'B' ? 'text-blue-700' :
+                              lead.lead_grade === 'C' ? 'text-amber-700' :
+                              'text-rose-700'
+                            }`}>
+                              {lead.lead_grade || 'D'} — {lead.professional_score || 0}
+                            </span>
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* Captured at date */}
+                      <td className="px-4 py-3 text-[#475569] text-xs whitespace-nowrap">
+                        {new Date(lead.created_at).toLocaleDateString('pt-BR')}
                       </td>
                     </tr>
                   );
                 })
-              ) : (
-                <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-[#475569]/80 font-medium">
-                    Nenhum profissional capturado ou correspondente à busca.
-                  </td>
-                </tr>
               )}
             </tbody>
           </table>

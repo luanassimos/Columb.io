@@ -177,9 +177,18 @@ export default function ContactsClient({ contacts, role }: ContactsClientProps) 
     return colors[sum % colors.length];
   };
 
+  const [activeTab, setActiveTab] = useState<'company' | 'professional'>('company');
   const [sortKey, setSortKey] = useState<SortKey>('imported_at');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [search, setSearch] = useState('');
+
+  const companyContactsCount = contacts.filter(c => !c.tags.includes('Professional Finder')).length;
+  const professionalContactsCount = contacts.filter(c => c.tags.includes('Professional Finder')).length;
+
+  const tabContacts = contacts.filter(c => {
+    const isProfessional = c.tags.includes('Professional Finder');
+    return activeTab === 'professional' ? isProfessional : !isProfessional;
+  });
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -190,7 +199,7 @@ export default function ContactsClient({ contacts, role }: ContactsClientProps) 
     }
   };
 
-  const filtered = contacts
+  const filtered = tabContacts
     .filter(c => {
       if (!search) return true;
       const q = search.toLowerCase();
@@ -212,7 +221,7 @@ export default function ContactsClient({ contacts, role }: ContactsClientProps) 
       return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
     });
 
-  const statusCounts = contacts.reduce((acc, c) => {
+  const statusCounts = tabContacts.reduce((acc, c) => {
     acc[c.status] = (acc[c.status] || 0) + 1;
     return acc;
   }, {} as Record<string, number>);
@@ -236,38 +245,44 @@ export default function ContactsClient({ contacts, role }: ContactsClientProps) 
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex justify-end items-start">
-        <div className="flex gap-2">
-          <button
-            type="button"
-            disabled
-            className="flex items-center gap-2 px-4 py-2 bg-[#F7FAFF] border border-[#D8E0EA] text-[#475569]/50 rounded-lg text-sm font-semibold cursor-not-allowed"
-          >
-            <Upload className="h-4 w-4" />
-            CSV Import
-          </button>
-          {canEditContacts && (
-            <button
-              type="button"
-              onClick={() => {
-                setContactToEdit(null);
-                setIsModalOpen(true);
-              }}
-              className="flex items-center gap-2 px-4 py-2 bg-[#2D6BFF] hover:bg-[#1b58ec] text-white rounded-lg text-sm font-semibold transition-all shadow-sm shadow-[#2D6BFF]/30"
-            >
-              <Plus className="h-4 w-4" />
-              Add Lead
-            </button>
-          )}
-        </div>
+
+      {/* Navigation Tabs */}
+      <div className="flex border-b border-[#D8E0EA] gap-2.5">
+        <button
+          onClick={() => {
+            setActiveTab('company');
+            setSelectedIds(new Set());
+          }}
+          className={`flex items-center gap-2 px-4 pb-3 text-sm font-bold border-b-2 transition-all cursor-pointer ${
+            activeTab === 'company'
+              ? 'border-[#2D6BFF] text-[#2D6BFF]'
+              : 'border-transparent text-[#475569] hover:text-[#002B6A] hover:border-slate-300'
+          }`}
+        >
+          <Building className="h-4 w-4" />
+          Company ({companyContactsCount})
+        </button>
+        <button
+          onClick={() => {
+            setActiveTab('professional');
+            setSelectedIds(new Set());
+          }}
+          className={`flex items-center gap-2 px-4 pb-3 text-sm font-bold border-b-2 transition-all cursor-pointer ${
+            activeTab === 'professional'
+              ? 'border-[#2D6BFF] text-[#2D6BFF]'
+              : 'border-transparent text-[#475569] hover:text-[#002B6A] hover:border-slate-300'
+          }`}
+        >
+          <Users className="h-4 w-4" />
+          Professionals ({professionalContactsCount})
+        </button>
       </div>
 
       {/* Status Summary Bar */}
-      {contacts.length > 0 && (
+      {tabContacts.length > 0 && (
         <div className="flex flex-wrap gap-2">
           <span className="px-3 py-1 rounded-full text-xs font-bold bg-[#002B6A] text-white">
-            {contacts.length} total
+            {tabContacts.length} total
           </span>
           {Object.entries(STATUS_STYLES).map(([status, style]) =>
             statusCounts[status] ? (
@@ -279,16 +294,20 @@ export default function ContactsClient({ contacts, role }: ContactsClientProps) 
         </div>
       )}
 
-      {contacts.length === 0 ? (
+      {tabContacts.length === 0 ? (
         /* Empty State */
         <div className="glass-card rounded-2xl border border-[#D8E0EA] text-center py-32 max-w-xl mx-auto space-y-4">
           <div className="h-12 w-12 rounded-full bg-[#EAF2FF] border border-[#D8E0EA] text-[#2D6BFF] flex items-center justify-center mx-auto">
-            <Users className="h-6 w-6" />
+            {activeTab === 'professional' ? <Users className="h-6 w-6" /> : <Building className="h-6 w-6" />}
           </div>
           <div className="space-y-1">
-            <h3 className="text-base font-bold text-[#002B6A]">No leads yet</h3>
+            <h3 className="text-base font-bold text-[#002B6A]">
+              {activeTab === 'professional' ? 'Nenhum profissional cadastrado' : 'Nenhuma empresa cadastrada'}
+            </h3>
             <p className="text-xs text-[#475569] max-w-[280px] mx-auto leading-normal">
-              Click <strong>Add Lead</strong> to create your first lead manually.
+              {activeTab === 'professional'
+                ? 'Capture perfis profissionais ou adicione um lead manualmente para começar.'
+                : 'Capture empresas ou adicione um lead manualmente para começar.'}
             </p>
           </div>
           {canEditContacts && (
@@ -375,7 +394,7 @@ export default function ContactsClient({ contacts, role }: ContactsClientProps) 
                               onClick={handleBulkDelete}
                               className="w-full text-left px-3 py-2 text-xs text-rose-600 hover:bg-rose-50 transition-colors font-semibold cursor-pointer"
                             >
-                              Delete Selected
+                              Excluir Selecionados
                             </button>
                           </>
                         )}
@@ -407,7 +426,7 @@ export default function ContactsClient({ contacts, role }: ContactsClientProps) 
             </div>
           )}
 
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto min-h-[300px]">
             <table className="w-full text-sm">
               <thead className="bg-[#F7FAFF] border-b border-[#D8E0EA]">
                 <tr>
@@ -422,9 +441,9 @@ export default function ContactsClient({ contacts, role }: ContactsClientProps) 
                       />
                     </th>
                   )}
-                  <th className="px-4 py-3 text-left"><ThBtn col="name" label="Name" /></th>
+                  <th className="px-4 py-3 text-left"><ThBtn col="name" label={activeTab === 'professional' ? 'Professional' : 'Name'} /></th>
                   <th className="px-4 py-3 text-left"><ThBtn col="rating" label="Rating" /></th>
-                  <th className="px-4 py-3 text-left"><ThBtn col="company" label="Company" /></th>
+                  <th className="px-4 py-3 text-left"><ThBtn col="company" label={activeTab === 'professional' ? 'Role / Function' : 'Company'} /></th>
                   <th className="px-4 py-3 text-left"><ThBtn col="email" label="Email" /></th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-[#475569] uppercase tracking-wide">Tags</th>
                   <th className="px-4 py-3 text-left"><ThBtn col="status" label="Status" /></th>
@@ -574,7 +593,7 @@ export default function ContactsClient({ contacts, role }: ContactsClientProps) 
 
           {/* Footer */}
           <div className="px-4 py-3 border-t border-[#D8E0EA] text-xs text-[#475569]">
-            {filtered.length} of {contacts.length} leads
+            {filtered.length} of {tabContacts.length} leads
           </div>
         </div>
       )}

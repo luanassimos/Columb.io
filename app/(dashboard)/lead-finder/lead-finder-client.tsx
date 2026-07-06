@@ -24,7 +24,9 @@ import {
   MessageCircle,
   Mail,
   FileText,
-  Award
+  Award,
+  Building2,
+  Users
 } from 'lucide-react';
 import { createLeadJob, importLeadsToContacts, deleteLeads, recalculateLeadsScore, updateLead } from '@/app/actions/lead-finder';
 import { WorkspaceRole } from '@/lib/permissions';
@@ -971,6 +973,24 @@ export default function LeadFinderClient({
         }
       `}</style>
 
+      {/* Navigation Tabs */}
+      <div className="flex border-b border-[#D8E0EA] gap-2.5 mb-4">
+        <button
+          onClick={() => router.push('/lead-finder/companies')}
+          className="flex items-center gap-2 px-4 pb-3 text-sm font-bold border-b-2 transition-all cursor-pointer border-[#2D6BFF] text-[#2D6BFF]"
+        >
+          <Building2 className="h-4 w-4" />
+          Company (Empresas)
+        </button>
+        <button
+          onClick={() => router.push('/lead-finder/professionals')}
+          className="flex items-center gap-2 px-4 pb-3 text-sm font-bold border-b-2 transition-all cursor-pointer border-transparent text-[#475569] hover:text-[#002B6A] hover:border-slate-300"
+        >
+          <Users className="h-4 w-4" />
+          Professionals (Profissionais)
+        </button>
+      </div>
+
       {/* Dashboard Stats */}
       {leads.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1729,7 +1749,7 @@ export default function LeadFinderClient({
         )}
 
         {/* Table Container */}
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto min-h-[300px]">
           <table className="w-full text-sm text-left">
             <thead className="bg-[#F7FAFF] border-b border-[#D8E0EA]">
               <tr>
