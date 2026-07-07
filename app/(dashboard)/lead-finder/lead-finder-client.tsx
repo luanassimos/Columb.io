@@ -24,7 +24,9 @@ import {
   MessageCircle,
   Mail,
   FileText,
-  Award
+  Award,
+  Building2,
+  Users
 } from 'lucide-react';
 import { createLeadJob, importLeadsToContacts, deleteLeads, recalculateLeadsScore, updateLead } from '@/app/actions/lead-finder';
 import { WorkspaceRole } from '@/lib/permissions';
@@ -477,10 +479,11 @@ export default function LeadFinderClient({
   const [sortKey, setSortKey] = useState<SortKey>('created_at');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
 
-  // Reset page when filters or list changes
+  // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, scoreFilter, leads, filterPhone, filterWebsite, filterForm, minReachability, minContactScore]);
+  }, [search, scoreFilter, filterPhone, filterWebsite, filterForm, minReachability, minContactScore]);
+
 
   // Sync latestJob from props initially
   useEffect(() => {
@@ -837,6 +840,14 @@ export default function LeadFinderClient({
       return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
     });
 
+  // Clamp currentPage if it exceeds totalPages
+  useEffect(() => {
+    const totalPages = Math.ceil(filtered.length / 10) || 1;
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [filtered.length, currentPage]);
+
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
       setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -970,6 +981,24 @@ export default function LeadFinderClient({
           opacity: 0.8;
         }
       `}</style>
+
+      {/* Navigation Tabs */}
+      <div className="flex border-b border-[#D8E0EA] gap-2.5 mb-4">
+        <button
+          onClick={() => router.push('/lead-finder/companies')}
+          className="flex items-center gap-2 px-4 pb-3 text-sm font-bold border-b-2 transition-all cursor-pointer border-[#2D6BFF] text-[#2D6BFF]"
+        >
+          <Building2 className="h-4 w-4" />
+          Company (Empresas)
+        </button>
+        <button
+          onClick={() => router.push('/lead-finder/professionals')}
+          className="flex items-center gap-2 px-4 pb-3 text-sm font-bold border-b-2 transition-all cursor-pointer border-transparent text-[#475569] hover:text-[#002B6A] hover:border-slate-300"
+        >
+          <Users className="h-4 w-4" />
+          Professionals (Profissionais)
+        </button>
+      </div>
 
       {/* Dashboard Stats */}
       {leads.length > 0 && (
@@ -1729,7 +1758,7 @@ export default function LeadFinderClient({
         )}
 
         {/* Table Container */}
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto min-h-[300px]">
           <table className="w-full text-sm text-left">
             <thead className="bg-[#F7FAFF] border-b border-[#D8E0EA]">
               <tr>

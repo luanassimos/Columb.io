@@ -215,6 +215,8 @@ export async function importLeadsToContacts(leadIds: string[]) {
       status: 'new',
       rating: 0,
       imported_at: new Date().toISOString(),
+      website: lead.website || null,
+      maps_url: lead.maps_url || null,
     };
   });
 
@@ -224,6 +226,17 @@ export async function importLeadsToContacts(leadIds: string[]) {
   if (insertError) {
     console.error('Error inserting contacts from leads:', insertError);
     return { error: insertError.message };
+  }
+
+  // 4. Delete the imported leads from the leads table
+  const { error: deleteError } = await supabase
+    .from('leads')
+    .delete()
+    .in('id', leadIds)
+    .eq('workspace_id', workspaceId);
+
+  if (deleteError) {
+    console.error('Error deleting imported leads:', deleteError);
   }
 
   revalidatePath('/contacts');
