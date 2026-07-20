@@ -51,7 +51,6 @@ export default function AddLeadModal({ isOpen, onClose, contactToEdit }: AddLead
   const [hoveredRating, setHoveredRating] = useState<number>(0);
   const [notes, setNotes] = useState('');
   const [website, setWebsite] = useState('');
-  const [mapsUrl, setMapsUrl] = useState('');
 
   const firstInputRef = useRef<HTMLInputElement>(null);
 
