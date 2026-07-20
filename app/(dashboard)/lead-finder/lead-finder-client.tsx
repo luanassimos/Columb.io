@@ -2136,12 +2136,9 @@ export default function LeadFinderClient({
                     <div className="space-y-0.5">
                       <span className="text-[10px] font-bold text-[#475569] uppercase tracking-wider">Telefone</span>
                       {activeLead.phone ? (
-                        <a 
-                          href={`tel:${activeLead.phone}`} 
-                          className="block text-sm font-semibold text-[#002B6A] hover:text-[#2D6BFF] hover:underline"
-                        >
+                        <span className="block text-sm font-semibold text-[#002B6A]">
                           {activeLead.phone}
-                        </a>
+                        </span>
                       ) : (
                         <span className="block text-sm text-[#475569]/60 italic">Não disponível</span>
                       )}

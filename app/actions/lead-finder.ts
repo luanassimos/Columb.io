@@ -164,24 +164,21 @@ export async function importLeadsToContacts(leadIds: string[]) {
     let tags = ['Lead Finder', lead.category, lead.region];
     let company = lead.name;
 
+    let linkedinUrl: string | null = null;
+    let mapsUrl: string | null = lead.maps_url || null;
+
     if (isProf && profInfo) {
       tags = ['Professional Finder', profInfo.professional_role || lead.category, profInfo.location || lead.region];
       company = profInfo.professional_role || 'Professional Lead';
+      linkedinUrl = profInfo.profile_url || lead.maps_url || null;
+      mapsUrl = profInfo.profile_url || lead.maps_url || null;
       
       if (lead.email) {
         email = lead.email;
       } else if (profInfo.contact_channel && profInfo.contact_channel.includes('@')) {
         email = profInfo.contact_channel;
       } else {
-        const slug = lead.name
-          .toLowerCase()
-          .normalize('NFD')
-          .replace(/[\u0300-\u036f]/g, '')
-          .replace(/[^a-z0-9]/g, '-')
-          .replace(/-+/g, '-')
-          .trim()
-          .replace(/^-|-$/g, '');
-        email = `${slug || 'professional'}-${lead.id.substring(0, 6)}@linkedin-placeholder.com`;
+        email = '';
       }
     } else {
       if (lead.email) {
@@ -191,15 +188,7 @@ export async function importLeadsToContacts(leadIds: string[]) {
         if (domain) {
           email = `contato@${domain}`;
         } else {
-          const slug = lead.name
-            .toLowerCase()
-            .normalize('NFD')
-            .replace(/[\u0300-\u036f]/g, '')
-            .replace(/[^a-z0-9]/g, '-')
-            .replace(/-+/g, '-')
-            .trim()
-            .replace(/^-|-$/g, '');
-          email = `contato-${slug || 'lead'}-${lead.id.substring(0, 6)}@columb-placeholder.com`;
+          email = '';
         }
       }
     }
@@ -211,6 +200,9 @@ export async function importLeadsToContacts(leadIds: string[]) {
       email: email,
       phone: lead.phone || null,
       city: lead.region,
+      address: lead.address || null,
+      maps_url: mapsUrl,
+      linkedin_url: linkedinUrl,
       tags: tags,
       status: 'new',
       rating: 0,

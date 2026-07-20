@@ -168,6 +168,8 @@ export interface Contact {
   email: string;
   phone?: string | null;
   city?: string | null;
+  address?: string | null;
+  maps_url?: string | null;
   linkedin_url?: string | null;
   tags: string[];
   status: ContactStatus;

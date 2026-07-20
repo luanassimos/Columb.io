@@ -12,6 +12,8 @@ export interface CreateContactInput {
   email: string;
   phone?: string;
   city?: string;
+  address?: string;
+  maps_url?: string;
   linkedin_url?: string;
   tags?: string[];
   status?: ContactStatus;
@@ -129,6 +131,8 @@ export async function createContact(input: CreateContactInput) {
       email: input.email.trim().toLowerCase(),
       phone: input.phone?.trim() || null,
       city: input.city?.trim() || null,
+      address: input.address?.trim() || null,
+      maps_url: input.maps_url?.trim() || null,
       linkedin_url: input.linkedin_url?.trim() || null,
       tags: input.tags || [],
       status: input.status || 'new',
@@ -154,6 +158,8 @@ export interface UpdateContactInput {
   email: string;
   phone?: string;
   city?: string;
+  address?: string;
+  maps_url?: string;
   linkedin_url?: string;
   tags?: string[];
   status?: ContactStatus;
@@ -173,6 +179,8 @@ export async function updateContact(input: UpdateContactInput) {
     email: input.email.trim().toLowerCase(),
     phone: input.phone?.trim() || null,
     city: input.city?.trim() || null,
+    address: input.address?.trim() || null,
+    maps_url: input.maps_url?.trim() || null,
     linkedin_url: input.linkedin_url?.trim() || null,
     tags: input.tags || [],
     status: input.status,
@@ -265,5 +273,41 @@ export async function bulkUpdateContactsStatus(ids: string[], status: ContactSta
 
   revalidatePath('/contacts');
   return { success: true };
+}
+
+export async function bulkImportContacts(inputs: CreateContactInput[]) {
+  const context = await getActiveWorkspaceContext();
+  if ('error' in context) return { error: context.error };
+  const permissionError = assertPermission(context.role, 'manageContacts');
+  if (permissionError) return permissionError;
+  const { supabase, workspaceId } = context;
+
+  if (inputs.length === 0) return { success: true, count: 0 };
+
+  const contactsToInsert = inputs.map(input => ({
+    workspace_id: workspaceId,
+    name: input.name.trim(),
+    company: input.company.trim(),
+    email: input.email?.trim()?.toLowerCase() || '',
+    phone: input.phone?.trim() || null,
+    city: input.city?.trim() || null,
+    address: input.address?.trim() || null,
+    maps_url: input.maps_url?.trim() || null,
+    linkedin_url: input.linkedin_url?.trim() || null,
+    tags: input.tags || [],
+    status: input.status || 'new',
+    rating: input.rating !== undefined ? input.rating : 0,
+    imported_at: new Date().toISOString(),
+  }));
+
+  const { error } = await supabase.from('contacts').insert(contactsToInsert);
+
+  if (error) {
+    console.error('Error bulk importing contacts:', error);
+    return { error: error.message };
+  }
+
+  revalidatePath('/contacts');
+  return { success: true, count: contactsToInsert.length };
 }
 

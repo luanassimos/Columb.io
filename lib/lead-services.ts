@@ -214,13 +214,60 @@ export async function captureCompanyLeads(
 
         let phone: string | null = null;
         try {
-          const phoneEl = await page.$('[data-item-id^="phone:tel:"], [data-tooltip*="phone" i], [data-tooltip*="telefone" i], [aria-label*="phone" i], [aria-label*="telefone" i]');
-          if (phoneEl) {
+          const phoneEls = await page.$$('a[href^="tel:"], [data-item-id^="phone:tel:"], [data-item-id*="phone"], button[jsaction*="phone"], [data-tooltip*="phone" i], [data-tooltip*="telefone" i], [aria-label*="phone" i], [aria-label*="telefone" i], [aria-label*="ligar" i], [aria-label*="call" i]');
+          
+          for (const phoneEl of phoneEls) {
+            const href = await phoneEl.getAttribute('href');
+            if (href && href.startsWith('tel:')) {
+              phone = href.replace('tel:', '').trim();
+              if (phone) break;
+            }
+
             const itemId = await phoneEl.getAttribute('data-item-id');
-            if (itemId && itemId.startsWith('phone:tel:')) {
-              phone = itemId.replace('phone:tel:', '').trim();
-            } else {
-              phone = await phoneEl.getAttribute('data-value') || await phoneEl.innerText();
+            if (itemId && itemId.includes('phone:tel:')) {
+              const match = itemId.match(/phone:tel:(.+)/);
+              if (match && match[1]) {
+                phone = match[1].trim();
+                if (phone) break;
+              }
+            }
+
+            const ariaLabel = await phoneEl.getAttribute('aria-label');
+            if (ariaLabel) {
+              const phoneMatch = ariaLabel.match(/(?:\+?\d{1,3}[\s-]?)?\(?\d{2,4}\)?[\s-]?\d{3,5}[\s-]?\d{4}/);
+              if (phoneMatch) {
+                phone = phoneMatch[0].trim();
+                if (phone) break;
+              }
+            }
+
+            const dataVal = await phoneEl.getAttribute('data-value');
+            if (dataVal) {
+              const phoneMatch = dataVal.match(/(?:\+?\d{1,3}[\s-]?)?\(?\d{2,4}\)?[\s-]?\d{3,5}[\s-]?\d{4}/);
+              if (phoneMatch) {
+                phone = phoneMatch[0].trim();
+                if (phone) break;
+              }
+            }
+
+            const innerText = await phoneEl.innerText().catch(() => '');
+            if (innerText) {
+              const phoneMatch = innerText.match(/(?:\+?\d{1,3}[\s-]?)?\(?\d{2,4}\)?[\s-]?\d{3,5}[\s-]?\d{4}/);
+              if (phoneMatch) {
+                phone = phoneMatch[0].trim();
+                if (phone) break;
+              }
+            }
+          }
+
+          if (!phone) {
+            const detailPanel = await page.$('div[role="main"], div.m6QEfe, div[tabindex="-1"]');
+            if (detailPanel) {
+              const panelText = await page.evaluate(el => el.innerText, detailPanel);
+              const matches = panelText.match(/(?:\+55\s?)?\(?\d{2}\)?\s?9?\d{4}[-\s]?\d{4}/g);
+              if (matches && matches.length > 0) {
+                phone = matches[0].trim();
+              }
             }
           }
         } catch {}
