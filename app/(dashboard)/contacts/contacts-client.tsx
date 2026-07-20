@@ -342,7 +342,6 @@ export default function ContactsClient({ contacts, role }: ContactsClientProps) 
           )}
         </div>
       </div>
-      </div>
 
       {/* Status Summary Bar */}
       {tabContacts.length > 0 && (
