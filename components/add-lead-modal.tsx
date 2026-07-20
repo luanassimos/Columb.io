@@ -41,6 +41,8 @@ export default function AddLeadModal({ isOpen, onClose, contactToEdit }: AddLead
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [city, setCity] = useState('');
+  const [address, setAddress] = useState('');
+  const [mapsUrl, setMapsUrl] = useState('');
   const [linkedinUrl, setLinkedinUrl] = useState('');
   const [status, setStatus] = useState<ContactStatus>('new');
   const [tags, setTags] = useState<string[]>([]);
@@ -49,7 +51,6 @@ export default function AddLeadModal({ isOpen, onClose, contactToEdit }: AddLead
   const [hoveredRating, setHoveredRating] = useState<number>(0);
   const [notes, setNotes] = useState('');
   const [website, setWebsite] = useState('');
-  const [mapsUrl, setMapsUrl] = useState('');
 
   const firstInputRef = useRef<HTMLInputElement>(null);
 
@@ -69,6 +70,8 @@ export default function AddLeadModal({ isOpen, onClose, contactToEdit }: AddLead
         setEmail(contactToEdit.email || '');
         setPhone(contactToEdit.phone || '');
         setCity(contactToEdit.city || '');
+        setAddress(contactToEdit.address || '');
+        setMapsUrl(contactToEdit.maps_url || '');
         setLinkedinUrl(contactToEdit.linkedin_url || '');
         setStatus(contactToEdit.status || 'new');
         setTags(contactToEdit.tags || []);
@@ -82,6 +85,8 @@ export default function AddLeadModal({ isOpen, onClose, contactToEdit }: AddLead
         setEmail('');
         setPhone('');
         setCity('');
+        setAddress('');
+        setMapsUrl('');
         setLinkedinUrl('');
         setStatus('new');
         setTags([]);
@@ -143,6 +148,8 @@ export default function AddLeadModal({ isOpen, onClose, contactToEdit }: AddLead
         name, company, email,
         phone: phone || undefined,
         city: city || undefined,
+        address: address || undefined,
+        maps_url: mapsUrl || undefined,
         linkedin_url: linkedinUrl || undefined,
         tags,
         status,
@@ -156,6 +163,8 @@ export default function AddLeadModal({ isOpen, onClose, contactToEdit }: AddLead
         name, company, email,
         phone: phone || undefined,
         city: city || undefined,
+        address: address || undefined,
+        maps_url: mapsUrl || undefined,
         linkedin_url: linkedinUrl || undefined,
         tags,
         status,
@@ -277,6 +286,34 @@ export default function AddLeadModal({ isOpen, onClose, contactToEdit }: AddLead
                 className="w-full px-3 py-2.5 rounded-lg border border-[#D8E0EA] bg-[#F7FAFF] text-sm text-[#061A40] placeholder-[#475569]/50 focus:outline-none focus:border-[#2D6BFF] focus:bg-white transition-all"
               />
             </div>
+          </div>
+
+          {/* Full Address */}
+          <div className="space-y-1.5">
+            <label className="flex items-center gap-1.5 text-xs font-semibold text-[#002B6A]">
+              <MapPin className="h-3.5 w-3.5" /> Endereço Completo
+            </label>
+            <input
+              type="text"
+              value={address}
+              onChange={e => setAddress(e.target.value)}
+              placeholder="e.g. Av. Paulista 1000, Bela Vista, São Paulo"
+              className="w-full px-3 py-2.5 rounded-lg border border-[#D8E0EA] bg-[#F7FAFF] text-sm text-[#061A40] placeholder-[#475569]/50 focus:outline-none focus:border-[#2D6BFF] focus:bg-white transition-all"
+            />
+          </div>
+
+          {/* Maps / Yelp / External URL */}
+          <div className="space-y-1.5">
+            <label className="flex items-center gap-1.5 text-xs font-semibold text-[#002B6A]">
+              URL do Google Maps / Yelp
+            </label>
+            <input
+              type="url"
+              value={mapsUrl}
+              onChange={e => setMapsUrl(e.target.value)}
+              placeholder="https://maps.google.com/?cid=..."
+              className="w-full px-3 py-2.5 rounded-lg border border-[#D8E0EA] bg-[#F7FAFF] text-sm text-[#061A40] placeholder-[#475569]/50 focus:outline-none focus:border-[#2D6BFF] focus:bg-white transition-all"
+            />
           </div>
 
           {/* LinkedIn URL */}

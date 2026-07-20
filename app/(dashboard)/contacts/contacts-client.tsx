@@ -3,7 +3,8 @@
 import React, { useState } from 'react';
 import { Contact, ContactStatus } from '@/types';
 import AddLeadModal from '@/components/add-lead-modal';
-import { Plus, Upload, Users, ChevronUp, ChevronDown, ChevronsUpDown, Edit2, Trash2, Loader2, Star, X, Mail, Phone, MapPin, Building } from 'lucide-react';
+import ImportModal from '@/components/import-modal';
+import { Plus, Upload, Users, ChevronUp, ChevronDown, ChevronsUpDown, Edit2, Trash2, Loader2, Star, X, Mail, Phone, MapPin, Building, Globe } from 'lucide-react';
 import { deleteContact, updateContact, bulkDeleteContacts, bulkUpdateContactsStatus } from '@/app/actions/contact';
 import { useRouter } from 'next/navigation';
 import { hasPermission, WorkspaceRole } from '@/lib/permissions';
@@ -35,6 +36,7 @@ export default function ContactsClient({ contacts, role }: ContactsClientProps) 
   const canEditContacts = hasPermission(role, 'manageContacts');
   const canDeleteContacts = hasPermission(role, 'deleteContacts');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [contactToEdit, setContactToEdit] = useState<Contact | null>(null);
   
   // Bulk selection and actions
@@ -280,37 +282,65 @@ export default function ContactsClient({ contacts, role }: ContactsClientProps) 
 
   return (
     <div className="space-y-6">
+      {/* Header & Actions */}
+      <div className="flex justify-between items-center">
+        {/* Navigation Tabs */}
+        <div className="flex border-b border-[#D8E0EA] gap-2.5">
+          <button
+            onClick={() => {
+              setActiveTab('company');
+              setSelectedIds(new Set());
+            }}
+            className={`flex items-center gap-2 px-4 pb-3 text-sm font-bold border-b-2 transition-all cursor-pointer ${
+              activeTab === 'company'
+                ? 'border-[#2D6BFF] text-[#2D6BFF]'
+                : 'border-transparent text-[#475569] hover:text-[#002B6A] hover:border-slate-300'
+            }`}
+          >
+            <Building className="h-4 w-4" />
+            Company ({companyContactsCount})
+          </button>
+          <button
+            onClick={() => {
+              setActiveTab('professional');
+              setSelectedIds(new Set());
+            }}
+            className={`flex items-center gap-2 px-4 pb-3 text-sm font-bold border-b-2 transition-all cursor-pointer ${
+              activeTab === 'professional'
+                ? 'border-[#2D6BFF] text-[#2D6BFF]'
+                : 'border-transparent text-[#475569] hover:text-[#002B6A] hover:border-slate-300'
+            }`}
+          >
+            <Users className="h-4 w-4" />
+            Professionals ({professionalContactsCount})
+          </button>
+        </div>
 
-      {/* Navigation Tabs */}
-      <div className="flex border-b border-[#D8E0EA] gap-2.5">
-        <button
-          onClick={() => {
-            setActiveTab('company');
-            setSelectedIds(new Set());
-          }}
-          className={`flex items-center gap-2 px-4 pb-3 text-sm font-bold border-b-2 transition-all cursor-pointer ${
-            activeTab === 'company'
-              ? 'border-[#2D6BFF] text-[#2D6BFF]'
-              : 'border-transparent text-[#475569] hover:text-[#002B6A] hover:border-slate-300'
-          }`}
-        >
-          <Building className="h-4 w-4" />
-          Company ({companyContactsCount})
-        </button>
-        <button
-          onClick={() => {
-            setActiveTab('professional');
-            setSelectedIds(new Set());
-          }}
-          className={`flex items-center gap-2 px-4 pb-3 text-sm font-bold border-b-2 transition-all cursor-pointer ${
-            activeTab === 'professional'
-              ? 'border-[#2D6BFF] text-[#2D6BFF]'
-              : 'border-transparent text-[#475569] hover:text-[#002B6A] hover:border-slate-300'
-          }`}
-        >
-          <Users className="h-4 w-4" />
-          Professionals ({professionalContactsCount})
-        </button>
+        <div className="flex gap-2">
+          {canEditContacts && (
+            <button
+              type="button"
+              onClick={() => setIsImportModalOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-[#F7FAFF] hover:bg-[#EAF2FF] border border-[#D8E0EA] text-[#002B6A] rounded-lg text-sm font-semibold transition-all cursor-pointer shadow-xs"
+            >
+              <Upload className="h-4 w-4 text-[#2D6BFF]" />
+              Importar CSV / JSON
+            </button>
+          )}
+          {canEditContacts && (
+            <button
+              type="button"
+              onClick={() => {
+                setContactToEdit(null);
+                setIsModalOpen(true);
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-[#2D6BFF] hover:bg-[#1b58ec] text-white rounded-lg text-sm font-semibold transition-all shadow-sm shadow-[#2D6BFF]/30"
+            >
+              <Plus className="h-4 w-4" />
+              Add Lead
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Status Summary Bar */}
@@ -636,14 +666,21 @@ export default function ContactsClient({ contacts, role }: ContactsClientProps) 
       )}
 
       {canEditContacts && (
-        <AddLeadModal
-          isOpen={isModalOpen}
-          onClose={() => {
-            setIsModalOpen(false);
-            setContactToEdit(null);
-          }}
-          contactToEdit={contactToEdit}
-        />
+        <>
+          <AddLeadModal
+            isOpen={isModalOpen}
+            onClose={() => {
+              setIsModalOpen(false);
+              setContactToEdit(null);
+            }}
+            contactToEdit={contactToEdit}
+          />
+
+          <ImportModal
+            isOpen={isImportModalOpen}
+            onClose={() => setIsImportModalOpen(false)}
+          />
+        </>
       )}
 
       {/* Delete Confirmation Modal */}
@@ -813,30 +850,27 @@ export default function ContactsClient({ contacts, role }: ContactsClientProps) 
                     </div>
                   </div>
 
-                  {/* City */}
-                  <div className="flex items-center gap-3">
-                    <div className="h-8 w-8 rounded-lg bg-slate-50 flex items-center justify-center text-[#475569]/70 shrink-0">
+                  {/* Address */}
+                  <div className="flex items-start gap-3">
+                    <div className="h-8 w-8 rounded-lg bg-slate-50 flex items-center justify-center text-[#475569]/70 shrink-0 mt-0.5">
                       <MapPin className="h-4 w-4" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <span className="block text-[10px] text-[#475569]/65 font-bold uppercase">Cidade</span>
-                      {selectedLead.maps_url ? (
+                      <span className="block text-[10px] text-[#475569]/65 font-bold uppercase">Endereço / Localização</span>
+                      {selectedLead.address || selectedLead.city ? (
                         <a
-                          href={selectedLead.maps_url}
+                          href={
+                            selectedLead.maps_url ||
+                            `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                              `${selectedLead.name} ${selectedLead.address || selectedLead.city || ''}`
+                            )}`
+                          }
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="font-semibold text-[#2D6BFF] hover:underline block truncate text-sm"
+                          className="font-semibold text-[#2D6BFF] hover:underline block leading-snug text-xs"
+                          title="Clique para abrir no Google Maps / Yelp"
                         >
-                          {selectedLead.city || 'Ver no mapa'}
-                        </a>
-                      ) : selectedLead.city ? (
-                        <a
-                          href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${selectedLead.company} ${selectedLead.city}`)}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="font-semibold text-[#2D6BFF] hover:underline block truncate text-sm"
-                        >
-                          {selectedLead.city}
+                          {selectedLead.address || selectedLead.city}
                         </a>
                       ) : (
                         <span className="font-semibold text-[#061A40] block">—</span>
@@ -849,7 +883,7 @@ export default function ContactsClient({ contacts, role }: ContactsClientProps) 
                     <div className="h-8 w-8 rounded-lg bg-slate-50 flex items-center justify-center text-[#475569]/70 shrink-0">
                       <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <circle cx="12" cy="12" r="10" />
-                        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10z" />
                         <path d="M2 12h20" />
                       </svg>
                     </div>
@@ -871,30 +905,56 @@ export default function ContactsClient({ contacts, role }: ContactsClientProps) 
                   </div>
 
                   {/* LinkedIn */}
-                  <div className="flex items-center gap-3">
-                    <div className="h-8 w-8 rounded-lg bg-slate-50 flex items-center justify-center text-[#475569]/70 shrink-0">
-                      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                        <path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z" />
-                        <rect x="2" y="9" width="4" height="12" />
-                        <circle cx="4" cy="4" r="2" />
-                      </svg>
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <span className="block text-[10px] text-[#475569]/65 font-bold uppercase">LinkedIn</span>
-                      {selectedLead.linkedin_url ? (
+                  {selectedLead.linkedin_url && (
+                    <div className="flex items-center gap-3">
+                      <div className="h-8 w-8 rounded-lg bg-slate-50 flex items-center justify-center text-[#475569]/70 shrink-0">
+                        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                          <path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z" />
+                          <rect x="2" y="9" width="4" height="12" />
+                          <circle cx="4" cy="4" r="2" />
+                        </svg>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <span className="block text-[10px] text-[#475569]/65 font-bold uppercase">LinkedIn</span>
                         <a
                           href={selectedLead.linkedin_url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-[#2D6BFF] hover:underline font-semibold block truncate"
+                          className="text-[#2D6BFF] hover:underline font-semibold block truncate text-xs"
                         >
-                          Ver perfil
+                          Ver perfil no LinkedIn
                         </a>
-                      ) : (
-                        <span className="text-[#475569]/60 block">—</span>
-                      )}
+                      </div>
                     </div>
-                  </div>
+                  )}
+
+                  {/* Profile Google / Yelp / LinkedIn link */}
+                  {(selectedLead.maps_url || selectedLead.linkedin_url) && !selectedLead.linkedin_url && (
+                    <div className="flex items-center gap-3">
+                      <div className="h-8 w-8 rounded-lg bg-slate-50 flex items-center justify-center text-[#475569]/70 shrink-0">
+                        <Globe className="h-4 w-4" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <span className="block text-[10px] text-[#475569]/65 font-bold uppercase">
+                          {selectedLead.maps_url?.includes('yelp')
+                            ? 'Perfil no Yelp'
+                            : selectedLead.maps_url?.includes('google')
+                            ? 'Perfil no Google Maps'
+                            : selectedLead.linkedin_url
+                            ? 'Perfil no LinkedIn'
+                            : 'Perfil Original'}
+                        </span>
+                        <a
+                          href={selectedLead.maps_url || selectedLead.linkedin_url || '#'}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[#2D6BFF] hover:underline font-semibold block truncate text-xs"
+                        >
+                          Ver perfil original ↗
+                        </a>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
