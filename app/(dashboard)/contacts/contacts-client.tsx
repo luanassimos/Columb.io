@@ -53,18 +53,51 @@ export default function ContactsClient({ contacts, role }: ContactsClientProps) 
   // Profile Drawer States
   const [selectedLead, setSelectedLead] = useState<Contact | null>(null);
   const [isUpdatingRating, setIsUpdatingRating] = useState(false);
+  const [drawerNotes, setDrawerNotes] = useState('');
+  const [isSavingNotes, setIsSavingNotes] = useState(false);
 
-  // Sync selectedLead when contacts list updates
+  // Sync selectedLead when contacts list updates or lead selection changes
   React.useEffect(() => {
     if (selectedLead) {
       const updated = contacts.find(c => c.id === selectedLead.id);
       if (updated) {
         setSelectedLead(updated);
+        setDrawerNotes(updated.notes || '');
       } else {
         setSelectedLead(null);
       }
+    } else {
+      setDrawerNotes('');
     }
-  }, [contacts]);
+  }, [contacts, selectedLead?.id]);
+
+  const handleSaveNotes = async () => {
+    if (!selectedLead) return;
+    if (drawerNotes === (selectedLead.notes || '')) return;
+
+    setIsSavingNotes(true);
+    const result = await updateContact({
+      id: selectedLead.id,
+      name: selectedLead.name,
+      company: selectedLead.company,
+      email: selectedLead.email,
+      phone: selectedLead.phone || undefined,
+      city: selectedLead.city || undefined,
+      linkedin_url: selectedLead.linkedin_url || undefined,
+      tags: selectedLead.tags,
+      status: selectedLead.status,
+      rating: selectedLead.rating,
+      notes: drawerNotes,
+      website: selectedLead.website || undefined,
+      maps_url: selectedLead.maps_url || undefined,
+    });
+    setIsSavingNotes(false);
+    if (!result.error) {
+      router.refresh();
+    } else {
+      alert('Erro ao salvar observações: ' + result.error);
+    }
+  };
 
   const handleSelectRow = (id: string) => {
     if (!canEditContacts) return;
@@ -145,6 +178,8 @@ export default function ContactsClient({ contacts, role }: ContactsClientProps) 
       tags: selectedLead.tags,
       status: selectedLead.status,
       rating: newRating,
+      website: selectedLead.website || undefined,
+      maps_url: selectedLead.maps_url || undefined,
     });
     setIsUpdatingRating(false);
     if (!res.error) {
@@ -179,9 +214,18 @@ export default function ContactsClient({ contacts, role }: ContactsClientProps) 
     return colors[sum % colors.length];
   };
 
+  const [activeTab, setActiveTab] = useState<'company' | 'professional'>('company');
   const [sortKey, setSortKey] = useState<SortKey>('imported_at');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [search, setSearch] = useState('');
+
+  const companyContactsCount = contacts.filter(c => !c.tags.includes('Professional Finder')).length;
+  const professionalContactsCount = contacts.filter(c => c.tags.includes('Professional Finder')).length;
+
+  const tabContacts = contacts.filter(c => {
+    const isProfessional = c.tags.includes('Professional Finder');
+    return activeTab === 'professional' ? isProfessional : !isProfessional;
+  });
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -192,7 +236,7 @@ export default function ContactsClient({ contacts, role }: ContactsClientProps) 
     }
   };
 
-  const filtered = contacts
+  const filtered = tabContacts
     .filter(c => {
       if (!search) return true;
       const q = search.toLowerCase();
@@ -214,7 +258,7 @@ export default function ContactsClient({ contacts, role }: ContactsClientProps) 
       return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
     });
 
-  const statusCounts = contacts.reduce((acc, c) => {
+  const statusCounts = tabContacts.reduce((acc, c) => {
     acc[c.status] = (acc[c.status] || 0) + 1;
     return acc;
   }, {} as Record<string, number>);
@@ -238,8 +282,40 @@ export default function ContactsClient({ contacts, role }: ContactsClientProps) 
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex justify-end items-start">
+      {/* Header & Actions */}
+      <div className="flex justify-between items-center">
+        {/* Navigation Tabs */}
+        <div className="flex border-b border-[#D8E0EA] gap-2.5">
+          <button
+            onClick={() => {
+              setActiveTab('company');
+              setSelectedIds(new Set());
+            }}
+            className={`flex items-center gap-2 px-4 pb-3 text-sm font-bold border-b-2 transition-all cursor-pointer ${
+              activeTab === 'company'
+                ? 'border-[#2D6BFF] text-[#2D6BFF]'
+                : 'border-transparent text-[#475569] hover:text-[#002B6A] hover:border-slate-300'
+            }`}
+          >
+            <Building className="h-4 w-4" />
+            Company ({companyContactsCount})
+          </button>
+          <button
+            onClick={() => {
+              setActiveTab('professional');
+              setSelectedIds(new Set());
+            }}
+            className={`flex items-center gap-2 px-4 pb-3 text-sm font-bold border-b-2 transition-all cursor-pointer ${
+              activeTab === 'professional'
+                ? 'border-[#2D6BFF] text-[#2D6BFF]'
+                : 'border-transparent text-[#475569] hover:text-[#002B6A] hover:border-slate-300'
+            }`}
+          >
+            <Users className="h-4 w-4" />
+            Professionals ({professionalContactsCount})
+          </button>
+        </div>
+
         <div className="flex gap-2">
           {canEditContacts && (
             <button
@@ -266,12 +342,13 @@ export default function ContactsClient({ contacts, role }: ContactsClientProps) 
           )}
         </div>
       </div>
+      </div>
 
       {/* Status Summary Bar */}
-      {contacts.length > 0 && (
+      {tabContacts.length > 0 && (
         <div className="flex flex-wrap gap-2">
           <span className="px-3 py-1 rounded-full text-xs font-bold bg-[#002B6A] text-white">
-            {contacts.length} total
+            {tabContacts.length} total
           </span>
           {Object.entries(STATUS_STYLES).map(([status, style]) =>
             statusCounts[status] ? (
@@ -283,16 +360,20 @@ export default function ContactsClient({ contacts, role }: ContactsClientProps) 
         </div>
       )}
 
-      {contacts.length === 0 ? (
+      {tabContacts.length === 0 ? (
         /* Empty State */
         <div className="glass-card rounded-2xl border border-[#D8E0EA] text-center py-32 max-w-xl mx-auto space-y-4">
           <div className="h-12 w-12 rounded-full bg-[#EAF2FF] border border-[#D8E0EA] text-[#2D6BFF] flex items-center justify-center mx-auto">
-            <Users className="h-6 w-6" />
+            {activeTab === 'professional' ? <Users className="h-6 w-6" /> : <Building className="h-6 w-6" />}
           </div>
           <div className="space-y-1">
-            <h3 className="text-base font-bold text-[#002B6A]">No leads yet</h3>
+            <h3 className="text-base font-bold text-[#002B6A]">
+              {activeTab === 'professional' ? 'Nenhum profissional cadastrado' : 'Nenhuma empresa cadastrada'}
+            </h3>
             <p className="text-xs text-[#475569] max-w-[280px] mx-auto leading-normal">
-              Click <strong>Add Lead</strong> to create your first lead manually.
+              {activeTab === 'professional'
+                ? 'Capture perfis profissionais ou adicione um lead manualmente para começar.'
+                : 'Capture empresas ou adicione um lead manualmente para começar.'}
             </p>
           </div>
           {canEditContacts && (
@@ -379,7 +460,7 @@ export default function ContactsClient({ contacts, role }: ContactsClientProps) 
                               onClick={handleBulkDelete}
                               className="w-full text-left px-3 py-2 text-xs text-rose-600 hover:bg-rose-50 transition-colors font-semibold cursor-pointer"
                             >
-                              Delete Selected
+                              Excluir Selecionados
                             </button>
                           </>
                         )}
@@ -411,7 +492,7 @@ export default function ContactsClient({ contacts, role }: ContactsClientProps) 
             </div>
           )}
 
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto min-h-[300px]">
             <table className="w-full text-sm">
               <thead className="bg-[#F7FAFF] border-b border-[#D8E0EA]">
                 <tr>
@@ -426,9 +507,9 @@ export default function ContactsClient({ contacts, role }: ContactsClientProps) 
                       />
                     </th>
                   )}
-                  <th className="px-4 py-3 text-left"><ThBtn col="name" label="Name" /></th>
+                  <th className="px-4 py-3 text-left"><ThBtn col="name" label={activeTab === 'professional' ? 'Professional' : 'Name'} /></th>
                   <th className="px-4 py-3 text-left"><ThBtn col="rating" label="Rating" /></th>
-                  <th className="px-4 py-3 text-left"><ThBtn col="company" label="Company" /></th>
+                  <th className="px-4 py-3 text-left"><ThBtn col="company" label={activeTab === 'professional' ? 'Role / Function' : 'Company'} /></th>
                   <th className="px-4 py-3 text-left"><ThBtn col="email" label="Email" /></th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-[#475569] uppercase tracking-wide">Tags</th>
                   <th className="px-4 py-3 text-left"><ThBtn col="status" label="Status" /></th>
@@ -485,6 +566,8 @@ export default function ContactsClient({ contacts, role }: ContactsClientProps) 
                                   tags: c.tags,
                                   status: c.status,
                                   rating: star,
+                                  website: c.website || undefined,
+                                  maps_url: c.maps_url || undefined,
                                 }).then(() => {
                                   router.refresh();
                                 });
@@ -578,7 +661,7 @@ export default function ContactsClient({ contacts, role }: ContactsClientProps) 
 
           {/* Footer */}
           <div className="px-4 py-3 border-t border-[#D8E0EA] text-xs text-[#475569]">
-            {filtered.length} of {contacts.length} leads
+            {filtered.length} of {tabContacts.length} leads
           </div>
         </div>
       )}
@@ -796,8 +879,58 @@ export default function ContactsClient({ contacts, role }: ContactsClientProps) 
                     </div>
                   </div>
 
+                  {/* Website */}
+                  <div className="flex items-center gap-3">
+                    <div className="h-8 w-8 rounded-lg bg-slate-50 flex items-center justify-center text-[#475569]/70 shrink-0">
+                      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <circle cx="12" cy="12" r="10" />
+                        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10z" />
+                        <path d="M2 12h20" />
+                      </svg>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <span className="block text-[10px] text-[#475569]/65 font-bold uppercase">Site / Website</span>
+                      {selectedLead.website ? (
+                        <a
+                          href={selectedLead.website.startsWith('http') ? selectedLead.website : `https://${selectedLead.website}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[#2D6BFF] hover:underline font-semibold block truncate"
+                        >
+                          {selectedLead.website}
+                        </a>
+                      ) : (
+                        <span className="text-[#475569]/60 block">—</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* LinkedIn */}
+                  {selectedLead.linkedin_url && (
+                    <div className="flex items-center gap-3">
+                      <div className="h-8 w-8 rounded-lg bg-slate-50 flex items-center justify-center text-[#475569]/70 shrink-0">
+                        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                          <path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z" />
+                          <rect x="2" y="9" width="4" height="12" />
+                          <circle cx="4" cy="4" r="2" />
+                        </svg>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <span className="block text-[10px] text-[#475569]/65 font-bold uppercase">LinkedIn</span>
+                        <a
+                          href={selectedLead.linkedin_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[#2D6BFF] hover:underline font-semibold block truncate text-xs"
+                        >
+                          Ver perfil no LinkedIn
+                        </a>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Profile Google / Yelp / LinkedIn link */}
-                  {(selectedLead.maps_url || selectedLead.linkedin_url) && (
+                  {(selectedLead.maps_url || selectedLead.linkedin_url) && !selectedLead.linkedin_url && (
                     <div className="flex items-center gap-3">
                       <div className="h-8 w-8 rounded-lg bg-slate-50 flex items-center justify-center text-[#475569]/70 shrink-0">
                         <Globe className="h-4 w-4" />
@@ -844,6 +977,36 @@ export default function ContactsClient({ contacts, role }: ContactsClientProps) 
                   ) : (
                     <span className="text-sm text-[#475569]/60 italic">Nenhuma tag atribuída</span>
                   )}
+                </div>
+
+                {/* Personal Notes / Observações */}
+                <div className="space-y-2 pt-2">
+                  <div className="flex items-center justify-between border-b border-[#D8E0EA] pb-1.5">
+                    <h4 className="text-xs font-bold text-[#002B6A] uppercase tracking-wider flex items-center gap-1.5">
+                      <svg className="h-3.5 w-3.5 text-[#002B6A]/75" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 0 1-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                      </svg>
+                      Anotações Pessoais
+                    </h4>
+                    {drawerNotes !== (selectedLead.notes || '') && (
+                      <button
+                        type="button"
+                        disabled={isSavingNotes}
+                        onClick={handleSaveNotes}
+                        className="text-[10px] font-bold text-[#2D6BFF] hover:text-[#1b58ec] transition-colors flex items-center gap-1 cursor-pointer"
+                      >
+                        {isSavingNotes ? 'Salvando...' : 'Salvar'}
+                      </button>
+                    )}
+                  </div>
+                  <textarea
+                    value={drawerNotes}
+                    onChange={(e) => setDrawerNotes(e.target.value)}
+                    onBlur={handleSaveNotes}
+                    placeholder="Escreva observações ou ideias sobre esta lead..."
+                    rows={4}
+                    className="w-full p-2.5 rounded-lg border border-[#D8E0EA] bg-[#F7FAFF] text-xs text-[#061A40] placeholder-[#475569]/50 focus:outline-none focus:border-[#2D6BFF] focus:bg-white transition-all resize-none font-medium"
+                  />
                 </div>
 
                 <div className="pt-2 text-[10px] text-[#475569]/60 space-y-1">

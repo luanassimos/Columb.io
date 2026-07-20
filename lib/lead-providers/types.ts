@@ -22,5 +22,6 @@ export interface CompanyLeadProvider {
     lat: number | null;
     lng: number | null;
     radius: number | null;
+    onLead?: (lead: CompanyLead) => Promise<void>;
   }): Promise<CompanyLead[]>;
 }

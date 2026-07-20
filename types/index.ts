@@ -176,6 +176,9 @@ export interface Contact {
   rating: number; // 0 to 5 stars
   last_contact_at?: string | null;
   imported_at?: string | null;
+  notes?: string | null;
+  website?: string | null;
+  maps_url?: string | null;
   created_at: string;
 }
 
