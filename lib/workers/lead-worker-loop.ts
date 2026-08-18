@@ -7,6 +7,7 @@ import { createClient } from '@supabase/supabase-js';
 import ws from 'ws';
 import { captureProfessionalLeads } from '../lead-services';
 import { runCompanyLeadPipeline } from '../lead-providers/pipeline';
+import { processProspectingBatch } from '../prospecting/pipeline';
 
 function getSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -154,6 +155,12 @@ SOURCE: linkedin`);
           .update({ status: 'completed', updated_at: new Date().toISOString() })
           .eq('id', job.id);
         console.log(`[LeadWorker] Job ${job.id} finished — ${leadsSaved} leads.`);
+        if (job.automation_run_id) {
+          const { data: summary } = await supabase.from('lead_finder_jobs').select('execution_summary').eq('id', job.id).single();
+          const found = Number(summary?.execution_summary?.google_results || 0) + Number(summary?.execution_summary?.yelp_results || 0);
+          await supabase.from('automation_runs').update({ status: 'running', started_at: new Date().toISOString(), leads_found: found || leadsSaved, leads_created: leadsSaved }).eq('id', job.automation_run_id);
+        }
+        await processProspectingBatch(supabase, job.workspace_id, job.automation_run_id, Math.min(job.limit_count || 10, 20));
       }
     } catch (err: any) {
       console.error(`[LeadWorker] Failed job ${job.id}:`, err);

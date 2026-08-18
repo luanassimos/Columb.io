@@ -9,6 +9,7 @@ import * as path from 'path';
 import ws from 'ws';
 import { captureProfessionalLeads } from '../lib/lead-services';
 import { runCompanyLeadPipeline } from '../lib/lead-providers/pipeline';
+import { processProspectingBatch } from '../lib/prospecting/pipeline';
 
 // Simple .env.local loader for local execution
 function loadEnvLocal() {
@@ -185,6 +186,12 @@ SOURCE: linkedin`);
           .update({ status: 'completed', updated_at: new Date().toISOString() })
           .eq('id', job.id);
         console.log(`[Worker] Job ${job.id} completed! ${leadsSaved} leads captured.`);
+        if (job.automation_run_id) {
+          const { data: summary } = await supabase.from('lead_finder_jobs').select('execution_summary').eq('id', job.id).single();
+          const found = Number(summary?.execution_summary?.google_results || 0) + Number(summary?.execution_summary?.yelp_results || 0);
+          await supabase.from('automation_runs').update({ status: 'running', started_at: new Date().toISOString(), leads_found: found || leadsSaved, leads_created: leadsSaved }).eq('id', job.automation_run_id);
+        }
+        await processProspectingBatch(supabase, job.workspace_id, job.automation_run_id, Math.min(job.limit_count || 10, 20));
       }
     } catch (scrapeError: any) {
       console.error(`[Worker] Scraper failure for job ${job.id}:`, scrapeError);

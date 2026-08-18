@@ -5,6 +5,8 @@ import { getActiveWorkspaceContext } from '@/lib/workspace';
 import { assertPermission } from '@/lib/permissions';
 import { revalidatePath } from 'next/cache';
 import { ContactStatus } from '@/types';
+import { buildDedupeKeys, normalizeDomain, normalizeEmail, normalizePhone } from '@/lib/prospecting/normalize';
+import { ingestProspect } from '@/lib/prospecting/ingest';
 
 export interface CreateContactInput {
   name: string;
@@ -20,7 +22,6 @@ export interface CreateContactInput {
   rating?: number;
   notes?: string;
   website?: string;
-  maps_url?: string;
 }
 
 export async function createContact(input: CreateContactInput) {
@@ -125,36 +126,17 @@ export async function createContact(input: CreateContactInput) {
   if (permissionError) return permissionError;
   const { supabase: activeSupabase, workspaceId: activeWorkspaceId } = context;
 
-  const { data: contact, error } = await activeSupabase
-    .from('contacts')
-    .insert({
-      workspace_id: activeWorkspaceId,
-      name: input.name.trim(),
-      company: input.company.trim(),
-      email: input.email.trim().toLowerCase(),
-      phone: input.phone?.trim() || null,
-      city: input.city?.trim() || null,
-      address: input.address?.trim() || null,
-      maps_url: input.maps_url?.trim() || null,
-      linkedin_url: input.linkedin_url?.trim() || null,
-      tags: input.tags || [],
-      status: input.status || 'new',
-      rating: input.rating !== undefined ? input.rating : 0,
-      imported_at: new Date().toISOString(),
-      notes: input.notes?.trim() || null,
-      website: input.website?.trim() || null,
-      maps_url: input.maps_url?.trim() || null,
-    })
-    .select('id')
-    .single();
-
-  if (error) {
-    console.error('Error creating contact:', error);
-    return { error: error.message };
-  }
+  const result = await ingestProspect(activeSupabase, activeWorkspaceId, {
+    source: 'manual', company: input.company, contactName: input.name, email: input.email,
+    phone: input.phone, city: input.city, address: input.address, website: input.website,
+    mapsUrl: input.maps_url, linkedinUrl: input.linkedin_url,
+  });
+  if (result.status === 'duplicate') return { error: 'Esta empresa já existe na sua lista.' };
+  if (result.status !== 'created' || !result.contactId) return { error: 'Lead inválida ou suprimida.' };
+  await activeSupabase.from('contacts').update({ tags: input.tags || [], rating: input.rating || 0, notes: input.notes?.trim() || null }).eq('id', result.contactId).eq('workspace_id', activeWorkspaceId);
 
   revalidatePath('/contacts');
-  return { success: true, contactId: contact.id };
+  return { success: true, contactId: result.contactId };
 }
 
 export interface UpdateContactInput {
@@ -172,7 +154,6 @@ export interface UpdateContactInput {
   rating?: number;
   notes?: string;
   website?: string;
-  maps_url?: string;
 }
 
 export async function updateContact(input: UpdateContactInput) {
@@ -305,30 +286,83 @@ export async function bulkImportContacts(inputs: CreateContactInput[]) {
 
   if (inputs.length === 0) return { success: true, count: 0 };
 
-  const contactsToInsert = inputs.map(input => ({
-    workspace_id: workspaceId,
-    name: input.name.trim(),
-    company: input.company.trim(),
-    email: input.email?.trim()?.toLowerCase() || '',
-    phone: input.phone?.trim() || null,
-    city: input.city?.trim() || null,
-    address: input.address?.trim() || null,
-    maps_url: input.maps_url?.trim() || null,
-    linkedin_url: input.linkedin_url?.trim() || null,
-    tags: input.tags || [],
-    status: input.status || 'new',
-    rating: input.rating !== undefined ? input.rating : 0,
-    imported_at: new Date().toISOString(),
-  }));
+  const { data: existingKeys, error: keysError } = await supabase
+    .from('contact_dedupe_keys')
+    .select('dedupe_key')
+    .eq('workspace_id', workspaceId);
+  if (keysError) return { error: keysError.message };
 
-  const { error } = await supabase.from('contacts').insert(contactsToInsert);
+  const knownKeys = new Set((existingKeys || []).map((row) => row.dedupe_key));
+  let imported = 0;
+  let duplicates = 0;
+  let invalid = 0;
 
-  if (error) {
-    console.error('Error bulk importing contacts:', error);
-    return { error: error.message };
+  for (const input of inputs.slice(0, 1000)) {
+    const company = input.company?.trim();
+    const name = input.name?.trim() || company;
+    if (!company || !name) {
+      invalid++;
+      continue;
+    }
+
+    const keys = buildDedupeKeys(input);
+    if (keys.some((key) => knownKeys.has(key))) {
+      duplicates++;
+      continue;
+    }
+
+    const email = normalizeEmail(input.email);
+    const { data: contact, error } = await supabase.from('contacts').insert({
+      workspace_id: workspaceId,
+      name,
+      company,
+      email: email || '',
+      phone: input.phone?.trim() || null,
+      city: input.city?.trim() || null,
+      address: input.address?.trim() || null,
+      maps_url: input.maps_url?.trim() || null,
+      linkedin_url: input.linkedin_url?.trim() || null,
+      tags: input.tags || [],
+      status: input.status || 'new',
+      operational_status: 'enriching',
+      source: 'csv',
+      email_valid: Boolean(email),
+      email_normalized: email,
+      phone_normalized: normalizePhone(input.phone),
+      domain_normalized: normalizeDomain(input.website),
+      rating: input.rating !== undefined ? input.rating : 0,
+      website: input.website?.trim() || null,
+      imported_at: new Date().toISOString(),
+    }).select('id').single();
+
+    if (error || !contact) {
+      invalid++;
+      continue;
+    }
+
+    if (keys.length) {
+      const { error: dedupeError } = await supabase.from('contact_dedupe_keys').insert(
+        keys.map((dedupe_key) => ({ workspace_id: workspaceId, contact_id: contact.id, dedupe_key }))
+      );
+      if (dedupeError?.code === '23505') {
+        await supabase.from('contacts').delete().eq('id', contact.id).eq('workspace_id', workspaceId);
+        duplicates++;
+        continue;
+      }
+    }
+    keys.forEach((key) => knownKeys.add(key));
+    imported++;
   }
 
   revalidatePath('/contacts');
-  return { success: true, count: contactsToInsert.length };
+  revalidatePath('/leads');
+  return {
+    success: true,
+    count: imported,
+    imported,
+    duplicates,
+    invalid,
+    awaitingEnrichment: imported,
+  };
 }
 

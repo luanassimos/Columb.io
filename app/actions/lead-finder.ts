@@ -1,6 +1,5 @@
 'use server';
 
-import { createServerClient } from '@/lib/supabase/server';
 import { getActiveWorkspaceContext } from '@/lib/workspace';
 import { assertPermission } from '@/lib/permissions';
 import { revalidatePath } from 'next/cache';
@@ -97,24 +96,6 @@ export async function getLatestJob() {
   return { success: true, job };
 }
 
-function extractDomain(urlStr: string): string | null {
-  try {
-    let url = urlStr.trim();
-    if (!url.startsWith('http://') && !url.startsWith('https://')) {
-      url = 'http://' + url;
-    }
-    const parsed = new URL(url);
-    // Remove www.
-    let host = parsed.hostname;
-    if (host.startsWith('www.')) {
-      host = host.substring(4);
-    }
-    return host || null;
-  } catch {
-    return null;
-  }
-}
-
 export async function importLeadsToContacts(leadIds: string[]) {
   if (leadIds.length === 0) return { success: true, count: 0 };
 
@@ -181,16 +162,7 @@ export async function importLeadsToContacts(leadIds: string[]) {
         email = '';
       }
     } else {
-      if (lead.email) {
-        email = lead.email;
-      } else {
-        const domain = lead.website ? extractDomain(lead.website) : null;
-        if (domain) {
-          email = `contato@${domain}`;
-        } else {
-          email = '';
-        }
-      }
+      email = lead.email || '';
     }
 
     return {
@@ -208,7 +180,6 @@ export async function importLeadsToContacts(leadIds: string[]) {
       rating: 0,
       imported_at: new Date().toISOString(),
       website: lead.website || null,
-      maps_url: lead.maps_url || null,
     };
   });
 
@@ -220,16 +191,7 @@ export async function importLeadsToContacts(leadIds: string[]) {
     return { error: insertError.message };
   }
 
-  // 4. Delete the imported leads from the leads table
-  const { error: deleteError } = await supabase
-    .from('leads')
-    .delete()
-    .in('id', leadIds)
-    .eq('workspace_id', workspaceId);
-
-  if (deleteError) {
-    console.error('Error deleting imported leads:', deleteError);
-  }
+  // Keep original Lead Finder rows as immutable source/audit records.
 
   revalidatePath('/contacts');
   revalidatePath('/lead-finder');

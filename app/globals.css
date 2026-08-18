@@ -2,7 +2,7 @@
 
 :root {
   --background: #F7FAFF;
-  --foreground: #F7FAFF;
+  --foreground: #061A40;
   
   --card: #ffffff;
   --card-foreground: #061A40;
@@ -90,6 +90,30 @@ body {
   font-weight: 400;
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   overflow-x: hidden;
+}
+
+/* Soft brand gradient for primary interactive actions. */
+:is(button, a, [role="button"])[class~="bg-[#2D6BFF]"] {
+  background-color: #315fc7;
+  background-image: linear-gradient(135deg, #5b86e5 0%, #3d68cc 52%, #2951aa 100%);
+  border-color: rgba(41, 81, 170, 0.42);
+  box-shadow: 0 5px 14px rgba(37, 78, 164, 0.16);
+}
+
+:is(button, a, [role="button"])[class~="bg-[#2D6BFF]"]:hover {
+  background-color: #294fa7;
+  background-image: linear-gradient(135deg, #517bd8 0%, #345dbd 52%, #244895 100%);
+  box-shadow: 0 7px 18px rgba(31, 68, 148, 0.22);
+}
+
+:is(button, a, [role="button"])[class~="bg-[#2D6BFF]"]:disabled {
+  box-shadow: none;
+}
+
+.dark :is(button, a, [role="button"])[class~="bg-[#2D6BFF]"] {
+  background-image: linear-gradient(135deg, #527bd6 0%, #365eb7 55%, #27488e 100%);
+  border-color: rgba(96, 165, 250, 0.28);
+  box-shadow: 0 5px 16px rgba(3, 10, 25, 0.28);
 }
 
 h1 {

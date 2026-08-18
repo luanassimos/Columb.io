@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import SettingsClient from './settings-client';
 import { assertPermission, canManageSmtp } from '@/lib/permissions';
 import { getActiveWorkspaceContext } from '@/lib/workspace';
+import Link from 'next/link';
 
 export default async function SettingsPage() {
   const supabase = await createServerClient();
@@ -103,6 +104,12 @@ export default async function SettingsPage() {
 
   return (
     <div className="space-y-6">
+      <div><h1 className="text-3xl font-bold text-[#002B6A]">Settings</h1><p className="mt-1 text-sm text-[#475569]">Empresa, IA, e-mails e preferências da automação.</p></div>
+      <div className="grid gap-3 md:grid-cols-3">
+        <Link href="/onboarding" className="rounded-xl border border-[#D8E0EA] bg-white p-4 text-sm font-bold text-[#002B6A] hover:border-[#2D6BFF]">Empresa e perfil de IA<span className="mt-1 block text-xs font-normal text-[#475569]">Edite o contexto comercial usado pela Columb.</span></Link>
+        <Link href="/automation" className="rounded-xl border border-[#D8E0EA] bg-white p-4 text-sm font-bold text-[#002B6A] hover:border-[#2D6BFF]">Automação<span className="mt-1 block text-xs font-normal text-[#475569]">Limites, nichos, regiões e envio automático.</span></Link>
+        <Link href="/templates" className="rounded-xl border border-[#D8E0EA] bg-white p-4 text-sm font-bold text-[#002B6A] hover:border-[#2D6BFF]">IA e e-mails<span className="mt-1 block text-xs font-normal text-[#475569]">Templates legados e configuração de envio.</span></Link>
+      </div>
 
       <SettingsClient
         activeWorkspace={activeWorkspace}

@@ -263,7 +263,7 @@ export async function captureCompanyLeads(
           if (!phone) {
             const detailPanel = await page.$('div[role="main"], div.m6QEfe, div[tabindex="-1"]');
             if (detailPanel) {
-              const panelText = await page.evaluate(el => el.innerText, detailPanel);
+              const panelText = await page.evaluate(el => (el as HTMLElement).innerText, detailPanel);
               const matches = panelText.match(/(?:\+55\s?)?\(?\d{2}\)?\s?9?\d{4}[-\s]?\d{4}/g);
               if (matches && matches.length > 0) {
                 phone = matches[0].trim();
