@@ -8,18 +8,11 @@ import { signOut } from '@/app/actions/auth';
 import {
   LayoutDashboard,
   Users,
-  Mail,
-  Send,
-  Inbox,
-  Bell,
   Settings,
   LogOut,
   ChevronLeft,
   ChevronRight,
-  Calendar,
-  Target,
-  Building,
-  Briefcase,
+  Bot,
   ChevronUp,
   ChevronDown
 } from 'lucide-react';
@@ -34,32 +27,16 @@ interface SidebarProps {
 export default function Sidebar({ profileName, userEmail, mobileOpen, onClose }: SidebarProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const pathname = usePathname();
-
-  const [isCaptarLeadsOpen, setIsCaptarLeadsOpen] = useState(pathname.startsWith('/lead-finder'));
+  const [isCaptarLeadsOpen, setIsCaptarLeadsOpen] = useState(false);
 
   const mainNavItems = [
     { label: 'Dashboard', icon: LayoutDashboard, href: '/dashboard' },
-    { label: 'Inbox', icon: Inbox, href: '/inbox' },
-    {
-      label: 'Captar Leads',
-      icon: Target,
-      href: '/lead-finder',
-      isDropdown: true,
-      subItems: [
-        { label: 'Empresas', icon: Building, href: '/lead-finder/companies' },
-        { label: 'Profissionais', icon: Briefcase, href: '/lead-finder/professionals' }
-      ]
-    },
-    { label: 'Leads', icon: Users, href: '/contacts' },
-    { label: 'Templates', icon: Mail, href: '/templates' },
-    { label: 'Campaigns', icon: Calendar, href: '/campaigns' },
-    { label: 'Email Blasts', icon: Send, href: '/blasts' },
-  ];
-
-  const bottomNavItems = [
-    { label: 'Notifications', icon: Bell, href: '/notifications' },
+    { label: 'Leads', icon: Users, href: '/leads' },
+    { label: 'Automação', icon: Bot, href: '/automation' },
     { label: 'Settings', icon: Settings, href: '/settings' },
   ];
+
+  const bottomNavItems: typeof mainNavItems = [];
 
   return (
     <aside

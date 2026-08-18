@@ -4,7 +4,7 @@ import React, { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { bulkImportContacts } from '@/app/actions/contact';
 import { CreateContactInput } from '@/app/actions/contact';
-import { X, Upload, FileText, CheckCircle, AlertCircle, Loader2, FileCode, ArrowRight } from 'lucide-react';
+import { X, FileText, CheckCircle, AlertCircle, Loader2, FileCode, ArrowRight } from 'lucide-react';
 
 interface ImportModalProps {
   isOpen: boolean;
@@ -21,6 +21,10 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successCount, setSuccessCount] = useState<number | null>(null);
+  const [sourceItems, setSourceItems] = useState<Record<string, any>[]>([]);
+  const [sourceHeaders, setSourceHeaders] = useState<string[]>([]);
+  const [columnMap, setColumnMap] = useState<Record<string, string>>({});
+  const [importSummary, setImportSummary] = useState<{ imported:number; duplicates:number; invalid:number; awaitingEnrichment:number } | null>(null);
 
   if (!isOpen) return null;
 
@@ -29,6 +33,7 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
     setParsedContacts([]);
     setError(null);
     setSuccessCount(null);
+    setSourceItems([]); setSourceHeaders([]); setColumnMap({}); setImportSummary(null);
     setIsProcessing(false);
     setIsUploading(false);
   };
@@ -199,7 +204,12 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
         throw new Error('Nenhum registro encontrado no arquivo.');
       }
 
-      const normalized = rawItems.map(normalizeItem);
+      const headers = Object.keys(rawItems[0] || {});
+      setSourceItems(rawItems); setSourceHeaders(headers);
+      const aliases: Record<string,string[]> = { company:['empresa','company','company_name','organization'], name:['nome','name','contact_name'], website:['site','website','url'], email:['email','e-mail','e-mail comercial','mail'], phone:['telefone','phone','celular','mobile'], address:['endereco','endereço','address'], city:['cidade','city','region','regiao'], category:['segmento','categoria','category','industry'] };
+      const detected = Object.fromEntries(Object.entries(aliases).map(([target,names]) => [target, headers.find((header) => names.includes(header.toLowerCase().trim())) || '']));
+      setColumnMap(detected);
+      const normalized = rawItems.map((item) => normalizeItem({ ...item, ...Object.fromEntries(Object.entries(detected).filter(([,header]) => header).map(([target,header]) => [target, item[header]])) }));
       setParsedContacts(normalized);
     } catch (err: any) {
       setError(err.message || 'Erro ao processar arquivo.');
@@ -234,6 +244,7 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
       setError(res.error);
     } else {
       setSuccessCount(res.count || parsedContacts.length);
+      setImportSummary({ imported: res.imported || 0, duplicates: res.duplicates || 0, invalid: res.invalid || 0, awaitingEnrichment: res.awaitingEnrichment || 0 });
       router.refresh();
       setTimeout(() => {
         handleClose();
@@ -272,7 +283,7 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
         {successCount !== null && (
           <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-700 font-semibold rounded-xl text-sm flex items-center gap-2">
             <CheckCircle className="h-5 w-5 text-emerald-600 shrink-0" />
-            Sucesso! {successCount} leads importados para a sua lista de contatos.
+            Sucesso! {successCount} leads importados. {importSummary && `${importSummary.duplicates} duplicados, ${importSummary.invalid} inválidos e ${importSummary.awaitingEnrichment} aguardando enriquecimento.`}
           </div>
         )}
 
@@ -328,6 +339,7 @@ export default function ImportModal({ isOpen, onClose }: ImportModalProps) {
             {/* Preview Section */}
             {parsedContacts.length > 0 && !isProcessing && (
               <div className="bg-slate-50 border border-[#D8E0EA] rounded-xl p-4 space-y-3">
+                <div><p className="mb-2 text-xs font-bold text-[#002B6A]">Mapeamento de colunas</p><div className="grid grid-cols-2 gap-2">{Object.entries({company:'Empresa',name:'Nome',website:'Site',email:'E-mail',phone:'Telefone',address:'Endereço',city:'Cidade',category:'Segmento'}).map(([target,label])=><label key={target} className="text-[10px] font-semibold text-[#475569]">{label}<select value={columnMap[target]||''} onChange={(event)=>{const next={...columnMap,[target]:event.target.value};setColumnMap(next);setParsedContacts(sourceItems.map((item)=>normalizeItem({...item,...Object.fromEntries(Object.entries(next).filter(([,header])=>header).map(([key,header])=>[key,item[header]]))})));}} className="mt-1 w-full rounded border border-[#D8E0EA] bg-white px-2 py-1.5 text-xs"><option value="">Não importar</option>{sourceHeaders.map((header)=><option key={header} value={header}>{header}</option>)}</select></label>)}</div></div>
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-[#002B6A]">
                     Contatos Encontrados: {parsedContacts.length}

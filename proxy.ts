@@ -42,6 +42,9 @@ export async function proxy(request: NextRequest) {
   const isProtectedPath =
     path === '/' ||
     path.startsWith('/dashboard') ||
+    path.startsWith('/leads') ||
+    path.startsWith('/automation') ||
+    path.startsWith('/onboarding') ||
     path.startsWith('/contacts') ||
     path.startsWith('/templates') ||
     path.startsWith('/campaigns') ||

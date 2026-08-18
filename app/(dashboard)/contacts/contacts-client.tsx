@@ -4,7 +4,8 @@ import React, { useState } from 'react';
 import { Contact, ContactStatus } from '@/types';
 import AddLeadModal from '@/components/add-lead-modal';
 import ImportModal from '@/components/import-modal';
-import { Plus, Upload, Users, ChevronUp, ChevronDown, ChevronsUpDown, Edit2, Trash2, Loader2, Star, X, Mail, Phone, MapPin, Building, Globe } from 'lucide-react';
+import LeadSearchModal from '@/components/lead-search-modal';
+import { Plus, Upload, Users, ChevronUp, ChevronDown, ChevronsUpDown, Edit2, Trash2, Loader2, Star, X, Mail, Phone, MapPin, Building, Globe, Search } from 'lucide-react';
 import { deleteContact, updateContact, bulkDeleteContacts, bulkUpdateContactsStatus } from '@/app/actions/contact';
 import { useRouter } from 'next/navigation';
 import { hasPermission, WorkspaceRole } from '@/lib/permissions';
@@ -37,6 +38,7 @@ export default function ContactsClient({ contacts, role }: ContactsClientProps) 
   const canDeleteContacts = hasPermission(role, 'deleteContacts');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
   const [contactToEdit, setContactToEdit] = useState<Contact | null>(null);
   
   // Bulk selection and actions
@@ -69,7 +71,7 @@ export default function ContactsClient({ contacts, role }: ContactsClientProps) 
     } else {
       setDrawerNotes('');
     }
-  }, [contacts, selectedLead?.id]);
+  }, [contacts, selectedLead]);
 
   const handleSaveNotes = async () => {
     if (!selectedLead) return;
@@ -316,7 +318,12 @@ export default function ContactsClient({ contacts, role }: ContactsClientProps) 
           </button>
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          {canEditContacts && (
+            <button type="button" onClick={() => setIsSearchModalOpen(true)} className="flex items-center gap-2 rounded-lg bg-[#2D6BFF] px-4 py-2 text-sm font-semibold text-white shadow-sm">
+              <Search className="h-4 w-4" /> Buscar Leads
+            </button>
+          )}
           {canEditContacts && (
             <button
               type="button"
@@ -324,7 +331,7 @@ export default function ContactsClient({ contacts, role }: ContactsClientProps) 
               className="flex items-center gap-2 px-4 py-2 bg-[#F7FAFF] hover:bg-[#EAF2FF] border border-[#D8E0EA] text-[#002B6A] rounded-lg text-sm font-semibold transition-all cursor-pointer shadow-xs"
             >
               <Upload className="h-4 w-4 text-[#2D6BFF]" />
-              Importar CSV / JSON
+              Importar CSV
             </button>
           )}
           {canEditContacts && (
@@ -337,7 +344,7 @@ export default function ContactsClient({ contacts, role }: ContactsClientProps) 
               className="flex items-center gap-2 px-4 py-2 bg-[#2D6BFF] hover:bg-[#1b58ec] text-white rounded-lg text-sm font-semibold transition-all shadow-sm shadow-[#2D6BFF]/30"
             >
               <Plus className="h-4 w-4" />
-              Add Lead
+              Adicionar manualmente
             </button>
           )}
         </div>
@@ -509,6 +516,8 @@ export default function ContactsClient({ contacts, role }: ContactsClientProps) 
                   <th className="px-4 py-3 text-left"><ThBtn col="name" label={activeTab === 'professional' ? 'Professional' : 'Name'} /></th>
                   <th className="px-4 py-3 text-left"><ThBtn col="rating" label="Rating" /></th>
                   <th className="px-4 py-3 text-left"><ThBtn col="company" label={activeTab === 'professional' ? 'Role / Function' : 'Company'} /></th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[#475569] uppercase tracking-wide">Segmento</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[#475569] uppercase tracking-wide">Score IA</th>
                   <th className="px-4 py-3 text-left"><ThBtn col="email" label="Email" /></th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-[#475569] uppercase tracking-wide">Tags</th>
                   <th className="px-4 py-3 text-left"><ThBtn col="status" label="Status" /></th>
@@ -521,7 +530,7 @@ export default function ContactsClient({ contacts, role }: ContactsClientProps) 
               <tbody className="divide-y divide-[#D8E0EA]">
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={7 + (canEditContacts ? 1 : 0) + (canEditContacts || canDeleteContacts ? 1 : 0)} className="px-4 py-12 text-center text-sm text-[#475569]">
+                    <td colSpan={9 + (canEditContacts ? 1 : 0) + (canEditContacts || canDeleteContacts ? 1 : 0)} className="px-4 py-12 text-center text-sm text-[#475569]">
                       No leads match your search.
                     </td>
                   </tr>
@@ -584,15 +593,17 @@ export default function ContactsClient({ contacts, role }: ContactsClientProps) 
                       </td>
                       {/* Company */}
                       <td className="px-4 py-3 text-[#061A40] whitespace-nowrap">{c.company}</td>
+                      <td className="px-4 py-3 text-xs text-[#475569]">{c.industry || c.tags?.[1] || '—'}</td>
+                      <td className="px-4 py-3"><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${Number(c.ai_fit_score) >= 70 ? 'bg-emerald-50 text-emerald-700' : Number(c.ai_fit_score) >= 40 ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-600'}`}>{c.ai_fit_score ?? '—'}</span></td>
                       {/* Email */}
                       <td className="px-4 py-3">
-                        <a
+                        {c.email ? <a
                           href={`mailto:${c.email}`}
                           onClick={e => e.stopPropagation()}
                           className="text-[#2D6BFF] hover:underline text-xs"
                         >
                           {c.email}
-                        </a>
+                        </a> : <span className="text-xs text-[#475569]">Não encontrado</span>}
                       </td>
                       {/* Tags */}
                       <td className="px-4 py-3">
@@ -680,6 +691,7 @@ export default function ContactsClient({ contacts, role }: ContactsClientProps) 
             isOpen={isImportModalOpen}
             onClose={() => setIsImportModalOpen(false)}
           />
+          <LeadSearchModal open={isSearchModalOpen} onClose={() => setIsSearchModalOpen(false)} />
         </>
       )}
 
@@ -977,6 +989,15 @@ export default function ContactsClient({ contacts, role }: ContactsClientProps) 
                     <span className="text-sm text-[#475569]/60 italic">Nenhuma tag atribuída</span>
                   )}
                 </div>
+
+                {selectedLead.ai_fit_score != null && (
+                  <div className="space-y-2 rounded-xl border border-[#D8E0EA] bg-[#F7FAFF] p-4">
+                    <div className="flex items-center justify-between"><h4 className="text-xs font-bold uppercase tracking-wider text-[#002B6A]">Avaliação da Columb</h4><span className="rounded-full bg-[#2D6BFF] px-3 py-1 text-sm font-bold text-white">{selectedLead.ai_fit_score}</span></div>
+                    <p className="text-xs font-semibold capitalize text-[#2D6BFF]">{selectedLead.ai_fit_label} compatibilidade</p>
+                    <p className="text-xs leading-relaxed text-[#475569]">{selectedLead.ai_fit_reason}</p>
+                    {selectedLead.ai_opportunity_summary && <p className="text-xs leading-relaxed text-[#061A40]"><strong>Oportunidade:</strong> {selectedLead.ai_opportunity_summary}</p>}
+                  </div>
+                )}
 
                 {/* Personal Notes / Observações */}
                 <div className="space-y-2 pt-2">

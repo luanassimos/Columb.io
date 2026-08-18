@@ -135,8 +135,8 @@ export default function AddLeadModal({ isOpen, onClose, contactToEdit }: AddLead
     e.preventDefault();
     setError(null);
 
-    if (!name.trim() || !company.trim() || !email.trim()) {
-      setError('Name, Company and Email are required.');
+    if (!name.trim() || !company.trim()) {
+      setError('Nome e empresa são obrigatórios.');
       return;
     }
 
@@ -149,7 +149,6 @@ export default function AddLeadModal({ isOpen, onClose, contactToEdit }: AddLead
         phone: phone || undefined,
         city: city || undefined,
         address: address || undefined,
-        maps_url: mapsUrl || undefined,
         linkedin_url: linkedinUrl || undefined,
         tags,
         status,
@@ -164,7 +163,6 @@ export default function AddLeadModal({ isOpen, onClose, contactToEdit }: AddLead
         phone: phone || undefined,
         city: city || undefined,
         address: address || undefined,
-        maps_url: mapsUrl || undefined,
         linkedin_url: linkedinUrl || undefined,
         tags,
         status,

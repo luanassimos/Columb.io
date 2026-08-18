@@ -3,6 +3,7 @@ import { YelpProvider } from './yelp-provider';
 import { areLeadsDuplicate, mergeLeadData } from './merge-engine';
 import { CompanyLead } from './types';
 import { calculateLeadScore } from '../lead-scoring';
+import { ingestProspect } from '../prospecting/ingest';
 
 export async function runCompanyLeadPipeline(
   supabase: any,
@@ -118,6 +119,13 @@ export async function runCompanyLeadPipeline(
       if (updateErr) {
         console.error(`[Pipeline] Error updating existing lead "${incoming.name}":`, updateErr);
       }
+      await ingestProspect(supabase, workspaceId, {
+        source: incoming.provider === 'yelp' ? 'yelp' : 'maps', sourceLeadId: existingRecord.id,
+        company: incoming.name, website: incoming.website, email: incoming.email, phone: incoming.phone,
+        address: incoming.address, city: region, industry: incoming.category || category, mapsUrl: incoming.maps_url,
+        googlePlaceId: incoming.provider === 'google_maps' ? incoming.external_id : null,
+        yelpId: incoming.provider === 'yelp' ? incoming.external_id : null,
+      });
     } else {
       // Create new lead record
       const score = calculateLeadScore({
@@ -171,6 +179,23 @@ export async function runCompanyLeadPipeline(
         savedCount++;
         activeSavedLeads.push(insertedLead);
 
+        // Lead Finder results immediately become visible in the unified Leads
+        // page. The staging row remains intact for source/audit compatibility.
+        await ingestProspect(supabase, workspaceId, {
+          source: incoming.provider === 'yelp' ? 'yelp' : 'maps',
+          sourceLeadId: insertedLead.id,
+          company: incoming.name,
+          website: incoming.website,
+          email: incoming.email,
+          phone: incoming.phone,
+          address: incoming.address,
+          city: region,
+          industry: incoming.category || category,
+          mapsUrl: incoming.maps_url,
+          googlePlaceId: incoming.provider === 'google_maps' ? incoming.external_id : null,
+          yelpId: incoming.provider === 'yelp' ? incoming.external_id : null,
+        });
+
         // Update progress count of the job in the database in real-time
         await supabase
           .from('lead_finder_jobs')
@@ -204,7 +229,8 @@ export async function runCompanyLeadPipeline(
     yelp_results: yelpCount,
     merged: mergedCount,
     duplicates: totalDuplicates,
-    saved: savedCount
+    saved: savedCount,
+    added_to_leads: savedCount
   };
 
   const { error: jobUpdateErr } = await supabase

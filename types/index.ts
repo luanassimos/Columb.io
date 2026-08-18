@@ -178,8 +178,21 @@ export interface Contact {
   imported_at?: string | null;
   notes?: string | null;
   website?: string | null;
-  maps_url?: string | null;
   created_at: string;
+  source?: string;
+  operational_status?: 'new' | 'enriching' | 'ready' | 'queued' | 'contacted' | 'replied' | 'disqualified';
+  email_valid?: boolean;
+  auto_send_eligible?: boolean;
+  unsubscribed?: boolean;
+  bounced?: boolean;
+  industry?: string | null;
+  ai_fit_score?: number | null;
+  ai_fit_label?: string | null;
+  ai_fit_reason?: string | null;
+  ai_opportunity_summary?: string | null;
+  ai_recommended_service?: string | null;
+  ai_personalization_points?: string[];
+  ai_suggested_approach?: string | null;
 }
 
 export interface Template {

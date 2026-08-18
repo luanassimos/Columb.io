@@ -7,6 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test tests/prospecting-normalize.test.ts",
     "worker:leads": "tsx scripts/lead-worker.ts",
     "worker:enrichment": "tsx scripts/enrichment-worker.ts"
   },
